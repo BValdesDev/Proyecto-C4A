@@ -1,0 +1,15 @@
+# app/api/v1/endpoints/__init__.py
+"""
+Endpoints de la API v1
+"""
+
+from . import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones
+
+__all__ = [
+    "auth",
+    "usuarios", 
+    "organizaciones",
+    "evaluaciones",
+    "reportes",
+    "suscripciones"
+] 
