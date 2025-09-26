@@ -142,3 +142,12 @@ docs/_build/
 test-results/
 playwright-report/
 test-results.xml
+
+# Large files and installers
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+DockerDesktopInstaller.exe
