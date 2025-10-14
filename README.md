@@ -12,6 +12,7 @@ Plataforma SaaS de evaluación de ciberseguridad para PyMEs chilenas basada en f
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Contribuir](#contribuir)
 - [Licencia](#licencia)
+- [Soporte](#soporte)
 
 ## ✨ Características
 
@@ -314,12 +315,6 @@ c4a-autodiagnostico/
 ## 📜 Licencia
 
 Este proyecto está bajo la licencia MIT. Ver [LICENSE](./LICENSE) para más detalles.
-
-## 👥 Equipo
-
-- **Tech Lead**: [Tu Nombre]
-- **Backend**: [Nombres]
-- **Frontend**: [Nombres]
 
 ## 📞 Soporte
 
