@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 from .core.config import config
 from .core.excepciones import ExcepcionC4A, convertir_excepcion_c4a_a_http
-from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones
+from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, dashboard
 from .modelos.base import crear_tablas
 
 
@@ -239,6 +239,13 @@ app.include_router(
     prefix="/api/v1/suscripciones",
     tags=["Suscripciones"]
 )
+
+app.include_router(
+    dashboard.router,
+    prefix="/api/v1/dashboard",
+    tags=["Dashboard"]
+)
+
 
 # Configuración de logging para producción
 if not config.debug:

@@ -1,0 +1,86 @@
+name: Git Flow Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate-gitflow:
+    name: Validar Git Flow
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Validar nomenclatura de rama
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          echo "Validando rama: $BRANCH_NAME"
+          
+          # Validar que la rama siga las convenciones de Git Flow
+          if [[ "$BRANCH_NAME" =~ ^(feature|bugfix|hotfix|release)/.+ ]]; then
+            echo "✅ Nomenclatura de rama válida"
+          else
+            echo "❌ Error: La rama debe seguir el formato: feature/*, bugfix/*, hotfix/*, o release/*"
+            echo "Rama actual: $BRANCH_NAME"
+            exit 1
+          fi
+      
+      - name: Validar rama destino
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          HEAD_BRANCH="${{ github.head_ref }}"
+          
+          echo "Rama origen: $HEAD_BRANCH"
+          echo "Rama destino: $BASE_BRANCH"
+          
+          # Validar que features vayan a develop
+          if [[ "$HEAD_BRANCH" =~ ^feature/.+ ]] && [[ "$BASE_BRANCH" != "develop" ]]; then
+            echo "❌ Error: Las ramas feature/* deben mergearse a develop"
+            exit 1
+          fi
+          
+          # Validar que bugfix vayan a develop
+          if [[ "$HEAD_BRANCH" =~ ^bugfix/.+ ]] && [[ "$BASE_BRANCH" != "develop" ]]; then
+            echo "❌ Error: Las ramas bugfix/* deben mergearse a develop"
+            exit 1
+          fi
+          
+          # Validar que releases vayan a main
+          if [[ "$HEAD_BRANCH" =~ ^release/.+ ]] && [[ "$BASE_BRANCH" != "main" ]]; then
+            echo "❌ Error: Las ramas release/* deben mergearse a main"
+            exit 1
+          fi
+          
+          # Validar que hotfixes vayan a main
+          if [[ "$HEAD_BRANCH" =~ ^hotfix/.+ ]] && [[ "$BASE_BRANCH" != "main" ]]; then
+            echo "❌ Error: Las ramas hotfix/* deben mergearse a main"
+            exit 1
+          fi
+          
+          echo "✅ Rama destino válida"
+      
+      - name: Validar commits
+        run: |
+          # Validar que los commits sigan Conventional Commits
+          git log --format=%s origin/${{ github.base_ref }}..${{ github.head_ref }} | while read msg; do
+            if [[ "$msg" =~ ^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:.+ ]]; then
+              echo "✅ Commit válido: $msg"
+            else
+              echo "⚠️  Advertencia: Commit no sigue Conventional Commits: $msg"
+              echo "   Formato recomendado: tipo(scope): descripción"
+              echo "   Tipos: feat, fix, docs, style, refactor, test, chore"
+            fi
+          done
+      
+      - name: Resumen
+        if: success()
+        run: |
+          echo "🎉 ¡Todas las validaciones de Git Flow pasaron!"
+          echo "✅ Nomenclatura de rama correcta"
+          echo "✅ Rama destino apropiada"
+          echo "✅ Commits revisados"
+

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
@@ -15,12 +16,15 @@ import {
 } from 'lucide-react'
 import { api } from '../../utilidades/apiClient'
 import { Evaluacion, EstadisticasDashboard } from '../../tipos'
+import { toast } from 'sonner'
 
 export const DashboardPage: React.FC = () => {
   const { usuario } = useAuth()
+  const navigate = useNavigate()
   const [estadisticas, setEstadisticas] = useState<EstadisticasDashboard | null>(null)
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([])
   const [loading, setLoading] = useState(true)
+  const [creatingEvaluation, setCreatingEvaluation] = useState(false)
 
   useEffect(() => {
     if (usuario) {
@@ -85,6 +89,53 @@ export const DashboardPage: React.FC = () => {
     }
   }
 
+  // Funciones para acciones rápidas
+  const handleCrearNuevaEvaluacion = async () => {
+    try {
+      setCreatingEvaluation(true)
+      
+      // Crear evaluación directamente usando el endpoint del dashboard
+      const nombreEvaluacion = `Evaluación de Ciberseguridad - ${new Date().toLocaleDateString('es-CL')}`
+      
+      const response = await api.post('/api/v1/dashboard/evaluaciones', {
+        nombre: nombreEvaluacion
+      })
+      
+      toast.success('¡Evaluación creada exitosamente!')
+      
+      // Navegar a la página de la evaluación para comenzar a responder
+      navigate(`/app/evaluaciones/${response.id}`)
+      
+    } catch (error) {
+      console.error('Error creando evaluación:', error)
+      toast.error('Error al crear la evaluación. Inténtalo de nuevo.')
+    } finally {
+      setCreatingEvaluation(false)
+    }
+  }
+
+  const handleVerReportes = () => {
+    navigate('/app/reportes')
+  }
+
+  const handleGestionarUsuarios = () => {
+    navigate('/app/usuarios')
+  }
+
+  const handleActualizarPlan = () => {
+    navigate('/app/suscripciones')
+  }
+
+  const getNivelPreguntas = () => {
+    const nivel = usuario?.organizacion?.nivel_suscripcion || 'gratuito'
+    switch (nivel) {
+      case 'gratuito': return '10 preguntas (5-7 minutos)'
+      case 'pro': return '50 preguntas (15-20 minutos)'
+      case 'empresarial': return '100 preguntas (30-45 minutos)'
+      default: return '10 preguntas (5-7 minutos)'
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -112,8 +163,11 @@ export const DashboardPage: React.FC = () => {
           <Badge className={getNivelBadgeColor(usuario?.organizacion?.nivel_suscripcion || 'gratuito')}>
             Plan {usuario?.organizacion?.nivel_suscripcion?.toUpperCase()}
           </Badge>
+          <span className="text-sm text-muted-foreground">
+            {getNivelPreguntas()}
+          </span>
           {usuario?.organizacion?.nivel_suscripcion === 'gratuito' && (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleActualizarPlan}>
               Actualizar Plan
             </Button>
           )}
@@ -190,9 +244,13 @@ export const DashboardPage: React.FC = () => {
                   Tus últimas evaluaciones de ciberseguridad
                 </CardDescription>
               </div>
-              <Button size="sm" variant="outline">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => navigate('/app/evaluaciones')}
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Nueva
+                Ver Todas
               </Button>
             </div>
           </CardHeader>
@@ -202,8 +260,13 @@ export const DashboardPage: React.FC = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>No tienes evaluaciones aún</p>
-                  <Button className="mt-4" size="sm">
-                    Crear Primera Evaluación
+                  <Button 
+                    className="mt-4" 
+                    size="sm"
+                    onClick={handleCrearNuevaEvaluacion}
+                    disabled={creatingEvaluation}
+                  >
+                    {creatingEvaluation ? 'Creando...' : 'Crear Primera Evaluación'}
                   </Button>
                 </div>
               ) : (
@@ -252,19 +315,36 @@ export const DashboardPage: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <Button className="w-full justify-start" variant="outline">
+              <Button 
+                className="w-full justify-start" 
+                variant="outline"
+                onClick={handleCrearNuevaEvaluacion}
+                disabled={creatingEvaluation}
+              >
                 <FileText className="w-4 h-4 mr-2" />
-                Crear Nueva Evaluación
+                {creatingEvaluation ? 'Creando...' : 'Crear Nueva Evaluación'}
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button 
+                className="w-full justify-start" 
+                variant="outline"
+                onClick={handleVerReportes}
+              >
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Ver Reportes
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button 
+                className="w-full justify-start" 
+                variant="outline"
+                onClick={handleGestionarUsuarios}
+              >
                 <Users className="w-4 h-4 mr-2" />
                 Gestionar Usuarios
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button 
+                className="w-full justify-start" 
+                variant="outline"
+                onClick={handleActualizarPlan}
+              >
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Actualizar Plan
               </Button>
@@ -298,13 +378,17 @@ export const DashboardPage: React.FC = () => {
                   • Benchmarking sectorial
                 </p>
               </div>
-              <Button className="bg-c4a-blue-600 hover:bg-c4a-blue-700">
+              <Button 
+                className="bg-c4a-blue-600 hover:bg-c4a-blue-700"
+                onClick={handleActualizarPlan}
+              >
                 Ver Planes
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
+
     </div>
   )
 }

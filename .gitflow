@@ -1,0 +1,29 @@
+# Git Flow Configuration
+# Este archivo define la configuración de Git Flow para el proyecto C4A
+
+[gitflow]
+    # Rama principal de producción
+    branch.master = main
+    
+    # Rama de desarrollo
+    branch.develop = develop
+    
+    # Prefijos para diferentes tipos de ramas
+    prefix.feature = feature/
+    prefix.release = release/
+    prefix.hotfix = hotfix/
+    prefix.support = support/
+    prefix.versiontag = v
+
+[gitflow "branch"]
+    master = main
+    develop = develop
+
+[gitflow "prefix"]
+    feature = feature/
+    bugfix = bugfix/
+    release = release/
+    hotfix = hotfix/
+    support = support/
+    versiontag = v
+

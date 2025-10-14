@@ -174,5 +174,17 @@ class Usuario(ModeloConEliminacionLogica):
             return 0
         
         from datetime import datetime
-        diferencia = datetime.utcnow() - self.fecha_ultimo_acceso
+        ahora = datetime.utcnow()
+        
+        # Normalizar ambas fechas para evitar problemas de timezone
+        if self.fecha_ultimo_acceso.tzinfo is not None:
+            # Si la fecha de último acceso tiene timezone, convertir a naive
+            fecha_ultimo_acceso = self.fecha_ultimo_acceso.replace(tzinfo=None)
+        else:
+            fecha_ultimo_acceso = self.fecha_ultimo_acceso
+        
+        # Asegurar que ahora también sea naive
+        ahora = ahora.replace(tzinfo=None)
+        
+        diferencia = ahora - fecha_ultimo_acceso
         return diferencia.days

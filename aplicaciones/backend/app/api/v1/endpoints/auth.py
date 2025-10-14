@@ -8,7 +8,8 @@ from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+import uuid
 
 from app.modelos.base import obtener_sesion
 from app.modelos.usuario import Usuario
@@ -76,16 +77,55 @@ async def iniciar_sesion(
     request: Request,
     db: Session = Depends(obtener_sesion)
 ):
-    """Iniciar sesión de usuario"""
+    """Iniciar sesión de usuario con protecciones de seguridad"""
+    
+    # Obtener información del request
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
     
     try:
-        # Buscar usuario
-        usuario = db.query(Usuario).filter(
+        # Verificar rate limiting
+        if not seguridad._verificar_rate_limit(client_ip):
+            # Registrar intento fallido
+            seguridad._registrar_intento_fallido(client_ip)
+            
+            # Log de intento bloqueado
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="login_bloqueado_rate_limit",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Demasiados intentos fallidos. Intenta nuevamente en 5 minutos."
+            )
+        
+        # Buscar usuario con relaciones
+        from sqlalchemy.orm import joinedload
+        usuario = db.query(Usuario).options(
+            joinedload(Usuario.organizacion),
+            joinedload(Usuario.rol)
+        ).filter(
             Usuario.email == login_data.email,
             Usuario.fecha_eliminacion.is_(None)
         ).first()
         
         if not usuario:
+            # Registrar intento fallido
+            seguridad._registrar_intento_fallido(client_ip)
+            
+            # Log de intento fallido
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="login_fallido_usuario_no_encontrado",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciales inválidas"
@@ -93,6 +133,20 @@ async def iniciar_sesion(
         
         # Verificar contraseña
         if not seguridad.verificar_contraseña(login_data.password, usuario.hash_contraseña):
+            # Registrar intento fallido
+            seguridad._registrar_intento_fallido(client_ip)
+            
+            # Log de intento fallido
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="login_fallido_contraseña_incorrecta",
+                exitoso=False,
+                usuario_id=str(usuario.id),
+                organizacion_id=str(usuario.organizacion_id),
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciales inválidas"
@@ -100,18 +154,68 @@ async def iniciar_sesion(
         
         # Verificar estado de cuenta
         if not usuario.esta_activo:
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="login_fallido_cuenta_inactiva",
+                exitoso=False,
+                usuario_id=str(usuario.id),
+                organizacion_id=str(usuario.organizacion_id),
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Cuenta inactiva"
             )
         
-        # Generar tokens simples
-        access_token = "fake_access_token_" + str(usuario.id)
-        refresh_token = "fake_refresh_token_" + str(usuario.id)
+        # Generar tokens seguros
+        datos_token = {
+            "sub": str(usuario.id),
+            "email": usuario.email,
+            "org_id": str(usuario.organizacion_id),
+            "nivel_suscripcion": usuario.organizacion.nivel_suscripcion.value,
+            "rol": usuario.rol.nombre.value
+        }
+        
+        access_token = seguridad.crear_token_acceso(datos_token)
+        refresh_token, hash_refresh_token = seguridad.crear_token_refresco(datos_token)
+        
+        # Crear sesión en la base de datos
+        from app.modelos.sesion import Sesion
+        jti = str(uuid.uuid4())
+        ahora = datetime.utcnow()
+        sesion = Sesion(
+            usuario_id=usuario.id,
+            jti=jti,
+            hash_token_refresco=hash_refresh_token,
+            direccion_ip=client_ip,
+            agente_usuario=user_agent,
+            fecha_creacion=ahora,
+            fecha_vencimiento=ahora + timedelta(minutes=config.tiempo_expiracion_refresco),
+            esta_activa=True
+        )
+        db.add(sesion)
+        db.commit()
+        
+        # Actualizar último acceso
+        usuario.fecha_ultimo_acceso = datetime.utcnow()
+        db.commit()
+        
+        # Log de login exitoso
+        LogAuditoria.crear_log(
+            tipo_evento="autenticacion",
+            accion="login_exitoso",
+            exitoso=True,
+            usuario_id=str(usuario.id),
+            organizacion_id=str(usuario.organizacion_id),
+            direccion_ip=client_ip,
+            agente_usuario=user_agent
+        )
         
         return LoginResponse(
             access_token=access_token,
-            expires_in=900,  # 15 minutos
+            expires_in=config.tiempo_expiracion_acceso * 60,  # Convertir a segundos
             refresh_token=refresh_token,
             usuario={
                 "id": str(usuario.id),
@@ -134,10 +238,24 @@ async def iniciar_sesion(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
-        )
+            # Log de error interno con detalles
+            print(f"Error en login: {str(e)}")
+            print(f"Tipo de error: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="login_error_interno",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error interno del servidor: {str(e)}"
+            )
 
 
 @router.post("/registro")
@@ -256,21 +374,47 @@ async def renovar_token(
     request: Request,
     db: Session = Depends(obtener_sesion)
 ):
-    """Renovar token de acceso"""
+    """Renovar token de acceso con protecciones de seguridad"""
     
-    # Obtener información del request de forma simple
+    # Obtener información del request
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
-    info_request = {
-        "direccion_ip": client_ip,
-        "agente_usuario": user_agent
-    }
     
     try:
+        # Verificar rate limiting
+        if not seguridad._verificar_rate_limit(client_ip):
+            seguridad._registrar_intento_fallido(client_ip)
+            
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="renovar_token_bloqueado_rate_limit",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Demasiados intentos. Intenta nuevamente en 5 minutos."
+            )
+        
         # Verificar token de refresco
-        payload = seguridad.verificar_token(refresh_data.refresh_token, "refresh")
+        payload = seguridad.verificar_token(refresh_data.refresh_token, "refresh", client_ip)
         if not payload:
-            raise ExcepcionAutenticacion("Token de refresco inválido")
+            seguridad._registrar_intento_fallido(client_ip)
+            
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="renovar_token_fallido_token_invalido",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token de refresco inválido"
+            )
         
         # Buscar sesión
         sesion = db.query(Sesion).filter(
@@ -279,11 +423,33 @@ async def renovar_token(
         ).first()
         
         if not sesion or not sesion.esta_valida:
-            raise ExcepcionAutenticacion("Sesión inválida")
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="renovar_token_fallido_sesion_invalida",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesión inválida"
+            )
         
         # Verificar hash del token
         if not seguridad.verificar_contraseña(refresh_data.refresh_token, sesion.hash_token_refresco):
-            raise ExcepcionAutenticacion("Token de refresco inválido")
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="renovar_token_fallido_hash_invalido",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token de refresco inválido"
+            )
         
         # Buscar usuario
         usuario = db.query(Usuario).filter(
@@ -292,7 +458,18 @@ async def renovar_token(
         ).first()
         
         if not usuario or not usuario.esta_activo:
-            raise ExcepcionAutenticacion("Usuario no encontrado o inactivo")
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="renovar_token_fallido_usuario_inactivo",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Usuario no encontrado o inactivo"
+            )
         
         # Generar nuevo token de acceso
         datos_token = {
@@ -300,21 +477,24 @@ async def renovar_token(
             "email": usuario.email,
             "org_id": str(usuario.organizacion_id),
             "nivel_suscripcion": usuario.organizacion.nivel_suscripcion.value,
-            "rol": usuario.rol.nombre.value,
-            "jti": sesion.jti
+            "rol": usuario.rol.nombre.value
         }
         
         access_token = seguridad.crear_token_acceso(datos_token)
         
+        # Actualizar última actividad de la sesión
+        sesion.ultima_actividad = datetime.utcnow()
+        db.commit()
+        
         # Log de renovación exitosa
         LogAuditoria.crear_log(
             tipo_evento="autenticacion",
-            accion="renovar_token",
+            accion="renovar_token_exitoso",
             exitoso=True,
             usuario_id=str(usuario.id),
             organizacion_id=str(usuario.organizacion_id),
-            direccion_ip=info_request["direccion_ip"],
-            agente_usuario=info_request["agente_usuario"]
+            direccion_ip=client_ip,
+            agente_usuario=user_agent
         )
         
         return {
@@ -323,9 +503,17 @@ async def renovar_token(
             "expires_in": config.tiempo_expiracion_acceso * 60
         }
         
-    except ExcepcionAutenticacion:
+    except HTTPException:
         raise
     except Exception as e:
+        LogAuditoria.crear_log(
+            tipo_evento="autenticacion",
+            accion="renovar_token_error_interno",
+            exitoso=False,
+            direccion_ip=client_ip,
+            agente_usuario=user_agent
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
@@ -337,27 +525,45 @@ async def cerrar_sesion(
     request: Request,
     db: Session = Depends(obtener_sesion)
 ):
-    """Cerrar sesión de usuario"""
+    """Cerrar sesión de usuario con protecciones de seguridad"""
     
-    # Obtener información del request de forma simple
+    # Obtener información del request
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
-    info_request = {
-        "direccion_ip": client_ip,
-        "agente_usuario": user_agent
-    }
     
     try:
         # Obtener token del header
         authorization = request.headers.get("Authorization")
         if not authorization or not authorization.startswith("Bearer "):
-            raise ExcepcionAutenticacion("Token requerido")
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="logout_fallido_token_faltante",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token requerido"
+            )
         
         token = authorization.split(" ")[1]
-        payload = seguridad.verificar_token(token)
+        payload = seguridad.verificar_token(token, "access", client_ip)
         
         if not payload:
-            raise ExcepcionAutenticacion("Token inválido")
+            LogAuditoria.crear_log(
+                tipo_evento="autenticacion",
+                accion="logout_fallido_token_invalido",
+                exitoso=False,
+                direccion_ip=client_ip,
+                agente_usuario=user_agent
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido"
+            )
         
         # Buscar y revocar sesión
         sesion = db.query(Sesion).filter(
@@ -367,24 +573,34 @@ async def cerrar_sesion(
         
         if sesion:
             sesion.revocar("Logout manual")
+            # Revocar token en cache
+            seguridad.revocar_token(payload["jti"])
             db.commit()
         
-        # Log de logout
+        # Log de logout exitoso
         LogAuditoria.crear_log(
             tipo_evento="autenticacion",
-            accion="logout",
+            accion="logout_exitoso",
             exitoso=True,
             usuario_id=payload.get("sub"),
             organizacion_id=payload.get("org_id"),
-            direccion_ip=info_request["direccion_ip"],
-            agente_usuario=info_request["agente_usuario"]
+            direccion_ip=client_ip,
+            agente_usuario=user_agent
         )
         
         return {"mensaje": "Sesión cerrada exitosamente"}
         
-    except ExcepcionAutenticacion:
+    except HTTPException:
         raise
     except Exception as e:
+        LogAuditoria.crear_log(
+            tipo_evento="autenticacion",
+            accion="logout_error_interno",
+            exitoso=False,
+            direccion_ip=client_ip,
+            agente_usuario=user_agent
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"

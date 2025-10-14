@@ -15,11 +15,10 @@ export const SuscripcionesPage: React.FC = () => {
       precio: 0,
       descripcion: 'Perfecto para empezar',
       caracteristicas: [
-        '10 preguntas básicas',
-        '3 recomendaciones',
-        '1 evaluación por mes',
-        'Reporte con marca de agua',
-        'Soporte por email'
+        'Hasta 3 evaluaciones',
+        'Reportes básicos',
+        'Soporte por email',
+        'Acceso a dashboard'
       ],
       limitaciones: [
         'Sin benchmarking',
@@ -31,15 +30,13 @@ export const SuscripcionesPage: React.FC = () => {
       id: 'pro',
       nombre: 'Pro',
       precio: 32000,
-      descripcion: 'Para PyMEs establecidas',
+      descripcion: 'Para equipos en crecimiento',
       caracteristicas: [
-        '50 preguntas detalladas',
-        '15 recomendaciones',
-        '50 evaluaciones por mes',
+        'Evaluaciones ilimitadas',
+        'Reportes avanzados',
         'Benchmarking sectorial',
-        'Dashboard interactivo',
-        'Reportes sin marca de agua',
-        'Soporte prioritario'
+        'Soporte prioritario',
+        'Integración API'
       ],
       limitaciones: [
         'Máximo 10 usuarios',
@@ -49,17 +46,14 @@ export const SuscripcionesPage: React.FC = () => {
     {
       id: 'empresarial',
       nombre: 'Empresarial',
-      precio: 240000,
+      precio: null,
       descripcion: 'Para grandes organizaciones',
       caracteristicas: [
-        '100 preguntas completas',
-        '50+ recomendaciones',
-        '1000 evaluaciones por mes',
-        'SSO y gestión multi-usuario',
-        'API completa',
-        'Marca blanca',
-        'Soporte dedicado',
-        'Consultoría personalizada'
+        'Todo lo de Pro',
+        'Gestión multi-organización',
+        'SLA garantizado',
+        'Consultoría incluida',
+        'Soporte 24/7'
       ],
       limitaciones: []
     }
@@ -96,17 +90,17 @@ export const SuscripcionesPage: React.FC = () => {
       </div>
 
       {/* Planes */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
         {planes.map((plan) => (
           <Card 
             key={plan.id} 
-            className={`relative flex flex-col h-full ${
+            className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-lg ${
               plan.id === usuario?.organizacion?.nivel_suscripcion 
-                ? 'ring-2 ring-c4a-blue-500' 
+                ? 'ring-2 ring-c4a-blue-500 shadow-lg' 
                 : ''
             } ${
               plan.id === 'pro' 
-                ? 'border-c4a-blue-200' 
+                ? 'border-c4a-blue-200 shadow-lg scale-105' 
                 : ''
             }`}
           >
@@ -122,10 +116,18 @@ export const SuscripcionesPage: React.FC = () => {
               <CardTitle className="text-2xl">{plan.nombre}</CardTitle>
               <CardDescription>{plan.descripcion}</CardDescription>
               <div className="mt-4">
-                <span className="text-4xl font-bold">
-                  ${plan.precio.toLocaleString('es-CL')}
-                </span>
-                <span className="text-muted-foreground">/mes</span>
+                {plan.precio !== null ? (
+                  <>
+                    <span className="text-4xl font-bold">
+                      ${plan.precio.toLocaleString('es-CL')}
+                    </span>
+                    <span className="text-muted-foreground">/mes</span>
+                  </>
+                ) : (
+                  <span className="text-4xl font-bold text-foreground">
+                    Personalizado
+                  </span>
+                )}
               </div>
             </CardHeader>
             
@@ -173,8 +175,10 @@ export const SuscripcionesPage: React.FC = () => {
                         ? 'bg-c4a-blue-600 hover:bg-c4a-blue-700' 
                         : ''
                     }`}
+                    variant={plan.id === 'pro' ? 'default' : 'outline'}
                   >
-                    {plan.id === 'gratuito' ? 'Actual Plan' : 'Actualizar Plan'}
+                    {plan.id === 'gratuito' ? 'Comenzar Gratis' : 
+                     plan.id === 'empresarial' ? 'Contactar Ventas' : 'Probar Pro'}
                   </Button>
                 )}
               </div>

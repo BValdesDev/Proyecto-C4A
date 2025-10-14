@@ -31,12 +31,15 @@ def obtener_db() -> Session:
 # Dependencia para obtener usuario actual
 async def obtener_usuario_actual_dependencia(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(obtener_db)
+    db: Session = Depends(obtener_sesion)
 ) -> Usuario:
     """Obtener usuario actual desde token JWT"""
     
     if not credentials:
-        raise ExcepcionAutenticacion("Token de acceso requerido")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de acceso requerido"
+        )
     
     # Para tokens fake, extraer el ID del usuario del token
     token = credentials.credentials
@@ -50,21 +53,33 @@ async def obtener_usuario_actual_dependencia(
         ).first()
     else:
         # Verificar token JWT real
+        print(f"Verificando token: {token[:50]}...")
         payload = obtener_usuario_actual(token)
+        print(f"Payload obtenido: {payload}")
         if not payload:
-            raise ExcepcionAutenticacion("Token inválido o expirado")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido o expirado"
+            )
         
         # Obtener usuario de la base de datos
         usuario = db.query(Usuario).filter(
             Usuario.id == payload["id"],
             Usuario.fecha_eliminacion.is_(None)
         ).first()
+        print(f"Usuario encontrado: {usuario.email if usuario else 'None'}")
     
     if not usuario:
-        raise ExcepcionAutenticacion("Usuario no encontrado")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario no encontrado"
+        )
     
     if not usuario.esta_activo:
-        raise ExcepcionAutenticacion("Usuario inactivo")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario inactivo"
+        )
     
     return usuario
 

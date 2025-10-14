@@ -15,7 +15,9 @@ import {
   Target,
   Award,
   Globe,
-  Building
+  Building,
+  Check,
+  X
 } from 'lucide-react'
 
 export const HomePage: React.FC = () => {
@@ -88,6 +90,46 @@ export const HomePage: React.FC = () => {
       ],
       cta: "Contactar Ventas",
       popular: false
+    }
+  ]
+
+  const comparisonFeatures = [
+    {
+      category: "Evaluaciones",
+      features: [
+        { name: "Evaluaciones por mes", gratuito: "1", pro: "Ilimitadas", empresarial: "Ilimitadas" },
+        { name: "Preguntas disponibles", gratuito: "10 básicas", pro: "50 detalladas", empresarial: "100 completas" },
+        { name: "Recomendaciones", gratuito: "3", pro: "15", empresarial: "50+" }
+      ]
+    },
+    {
+      category: "Reportes y Análisis",
+      features: [
+        { name: "Reportes básicos", gratuito: true, pro: true, empresarial: true },
+        { name: "Reportes avanzados", gratuito: false, pro: true, empresarial: true },
+        { name: "Benchmarking sectorial", gratuito: false, pro: true, empresarial: true },
+        { name: "Marca de agua en reportes", gratuito: true, pro: false, empresarial: false },
+        { name: "Marca blanca", gratuito: false, pro: false, empresarial: true }
+      ]
+    },
+    {
+      category: "Usuarios y Organización",
+      features: [
+        { name: "Usuarios máximos", gratuito: "1", pro: "10", empresarial: "Ilimitados" },
+        { name: "Gestión multi-organización", gratuito: false, pro: false, empresarial: true },
+        { name: "SSO (Single Sign-On)", gratuito: false, pro: false, empresarial: true },
+        { name: "API completa", gratuito: false, pro: true, empresarial: true }
+      ]
+    },
+    {
+      category: "Soporte y Servicios",
+      features: [
+        { name: "Soporte por email", gratuito: true, pro: true, empresarial: true },
+        { name: "Soporte prioritario", gratuito: false, pro: true, empresarial: true },
+        { name: "Soporte 24/7", gratuito: false, pro: false, empresarial: true },
+        { name: "Consultoría personalizada", gratuito: false, pro: false, empresarial: true },
+        { name: "SLA garantizado", gratuito: false, pro: false, empresarial: true }
+      ]
     }
   ]
 
@@ -240,9 +282,9 @@ export const HomePage: React.FC = () => {
               Desde startups hasta grandes corporaciones, tenemos el plan perfecto para ti
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             {plans.map((plan, index) => (
-              <Card key={index} className={`relative ${plan.popular ? 'border-c4a-blue-500 shadow-lg scale-105' : ''}`}>
+              <Card key={index} className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-lg ${plan.popular ? 'border-c4a-blue-500 shadow-lg scale-105' : ''}`}>
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <Badge className="bg-c4a-blue-600 text-white">Más Popular</Badge>
@@ -256,25 +298,135 @@ export const HomePage: React.FC = () => {
                   </div>
                   <CardDescription>{plan.description}</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 mb-6">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-center">
-                        <CheckCircle className="w-5 h-5 text-green-500 mr-3" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button 
-                    className={`w-full ${plan.popular ? 'c4a-button-primary' : ''}`}
-                    variant={plan.popular ? 'default' : 'outline'}
-                    onClick={() => navigate('/registro')}
-                  >
-                    {plan.cta}
-                  </Button>
+                <CardContent className="flex flex-col h-full">
+                  <div className="flex-1">
+                    <ul className="space-y-3 mb-6">
+                      {plan.features.map((feature, featureIndex) => (
+                        <li key={featureIndex} className="flex items-center">
+                          <CheckCircle className="w-5 h-5 text-green-500 mr-3" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-auto">
+                    <Button 
+                      className={`w-full ${plan.popular ? 'c4a-button-primary' : ''}`}
+                      variant={plan.popular ? 'default' : 'outline'}
+                      onClick={() => navigate('/registro')}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Comparison Table Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Compara nuestros planes
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Encuentra el plan perfecto para tu organización
+            </p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full max-w-6xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
+              <thead>
+                <tr className="bg-gradient-to-r from-c4a-blue-600 to-c4a-purple-600 text-white">
+                  <th className="px-6 py-4 text-left font-semibold">Características</th>
+                  <th className="px-6 py-4 text-center font-semibold">
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold">Gratuito</span>
+                      <span className="text-sm opacity-90">$0/mes</span>
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold bg-c4a-blue-500">
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold">Pro</span>
+                      <span className="text-sm opacity-90">$32.000/mes</span>
+                      <Badge className="mt-1 bg-white text-c4a-blue-600 text-xs">Más Popular</Badge>
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold">
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold">Empresarial</span>
+                      <span className="text-sm opacity-90">Personalizado</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonFeatures.map((category, categoryIndex) => (
+                  <React.Fragment key={categoryIndex}>
+                    <tr className="bg-gray-50">
+                      <td colSpan={4} className="px-6 py-3 font-semibold text-gray-700 border-b">
+                        {category.category}
+                      </td>
+                    </tr>
+                    {category.features.map((feature, featureIndex) => (
+                      <tr key={featureIndex} className="border-b hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 font-medium text-gray-900">
+                          {feature.name}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {typeof feature.gratuito === 'boolean' ? (
+                            feature.gratuito ? (
+                              <Check className="w-5 h-5 text-green-600 mx-auto" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-500 mx-auto" />
+                            )
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">{feature.gratuito}</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center bg-blue-50">
+                          {typeof feature.pro === 'boolean' ? (
+                            feature.pro ? (
+                              <Check className="w-5 h-5 text-green-600 mx-auto" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-500 mx-auto" />
+                            )
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">{feature.pro}</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {typeof feature.empresarial === 'boolean' ? (
+                            feature.empresarial ? (
+                              <Check className="w-5 h-5 text-green-600 mx-auto" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-500 mx-auto" />
+                            )
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">{feature.empresarial}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="text-center mt-8">
+            <p className="text-muted-foreground mb-4">
+              ¿No estás seguro de qué plan elegir?
+            </p>
+            <Button 
+              onClick={() => navigate('/registro')}
+              className="bg-c4a-blue-600 hover:bg-c4a-blue-700"
+            >
+              Comenzar con Plan Gratuito
+            </Button>
           </div>
         </div>
       </section>
@@ -380,6 +532,7 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       </footer>
+
     </div>
   )
 }

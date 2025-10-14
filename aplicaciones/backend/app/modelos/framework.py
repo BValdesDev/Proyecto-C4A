@@ -46,6 +46,13 @@ class Framework(ModeloConUUID):
             if p.esta_activa and p.es_disponible_para_nivel(nivel)
         ]
     
+    def contar_preguntas_activas_para_nivel(self, nivel: NivelSuscripcion) -> int:
+        """Contar preguntas activas para un nivel específico"""
+        return len([
+            p for p in self.preguntas 
+            if p.esta_activa and p.es_disponible_para_nivel(nivel)
+        ])
+    
     def obtener_estadisticas(self) -> dict:
         """Obtener estadísticas del framework"""
         total_preguntas = len([p for p in self.preguntas if p.esta_activa])

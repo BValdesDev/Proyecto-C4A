@@ -443,6 +443,7 @@ export const CuestionarioNivel: React.FC<PropiedadesCuestionario> = ({
           </Card>
         </div>
       )}
+
     </div>
   )
 }

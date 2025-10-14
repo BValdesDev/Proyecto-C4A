@@ -76,6 +76,60 @@ export const EvaluacionPage: React.FC = () => {
     }
   }
 
+  const handleFinalizarEvaluacion = async () => {
+    try {
+      setSaving(true)
+      
+      // Finalizar la evaluación
+      const response = await api.post(`/api/v1/evaluaciones/${id}/finalizar`)
+      
+      if (response.success) {
+        toast.success('¡Evaluación completada exitosamente!')
+        
+        // Navegar al dashboard
+        setTimeout(() => {
+          navigate('/app/dashboard')
+        }, 1500)
+      }
+      
+    } catch (error) {
+      console.error('Error finalizando evaluación:', error)
+      toast.error('Error al finalizar la evaluación')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleGenerarPDF = async () => {
+    try {
+      // Descargar PDF directamente
+      const response = await fetch(`http://localhost:8000/api/v1/reportes/evaluacion/${id}/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('c4a_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `Reporte_Ciberseguridad_${evaluacion?.nombre.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        toast.success('PDF descargado exitosamente')
+      } else {
+        throw new Error('Error generando PDF')
+      }
+      
+    } catch (error) {
+      console.error('Error generando PDF:', error)
+      toast.error('Error al generar el PDF')
+    }
+  }
+
   const getTextoRespuesta = (valor: number) => {
     const textos = {
       0: 'No implementado',
@@ -260,11 +314,12 @@ export const EvaluacionPage: React.FC = () => {
                     </Button>
                   ) : (
                     <Button
-                      onClick={handleGuardarRespuestas}
+                      onClick={handleFinalizarEvaluacion}
                       disabled={!respuestaActual?.valor && respuestaActual?.valor !== 0}
+                      className="bg-green-600 hover:bg-green-700"
                     >
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      Finalizar
+                      {saving ? 'Finalizando...' : 'Finalizar Evaluación'}
                     </Button>
                   )}
                 </div>
@@ -285,13 +340,30 @@ export const EvaluacionPage: React.FC = () => {
               </h3>
               <p className="text-green-700 mb-4">
                 Has completado la evaluación de ciberseguridad.
+                {evaluacion.puntuacion_global && (
+                  <span className="block mt-2 text-lg font-bold">
+                    Puntuación: {evaluacion.puntuacion_global.toFixed(1)}/100
+                  </span>
+                )}
               </p>
               <div className="flex justify-center space-x-4">
-                <Button variant="outline">
-                  Ver Reporte
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate('/app/reportes')}
+                >
+                  Ver Reportes
                 </Button>
-                <Button>
-                  Generar PDF
+                <Button 
+                  onClick={handleGenerarPDF}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  📄 Generar PDF
+                </Button>
+                <Button 
+                  onClick={() => navigate('/app/dashboard')}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  🏠 Volver al Dashboard
                 </Button>
               </div>
             </div>

@@ -1,358 +1,385 @@
-# app/api/v1/endpoints/reportes.py
+#!/usr/bin/env python3
 """
-Endpoints de generación de reportes
+Endpoints de generación de reportes de ciberseguridad
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import List, Optional
+import io
+import json
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from datetime import datetime
 
 from app.modelos.base import obtener_sesion
 from app.modelos.evaluacion import Evaluacion
-from app.modelos.reporte import Reporte
-from app.modelos.organizacion import Organizacion
 from app.modelos.usuario import Usuario
-from app.modelos.log_auditoria import LogAuditoria
-from app.core.config import NivelSuscripcion
-from app.core.excepciones import ExcepcionValidacion, ExcepcionRecursoNoEncontrado, ExcepcionNivelSuscripcion
-from ..dependencias import (
-    obtener_usuario_actual_dependencia,
-    obtener_organizacion_usuario,
-    verificar_nivel_suscripcion
-)
+from app.servicios.reporte_service import ReporteCiberseguridadService
+from ..dependencias import obtener_usuario_actual_dependencia
 
 router = APIRouter()
 
-
 # Modelos Pydantic
-class ReporteGenerateRequest(BaseModel):
-    tipo_reporte: str = "completo"
-    incluir_benchmarking: bool = False
-    incluir_roadmap: bool = False
-
-
 class ReporteResponse(BaseModel):
-    id: str
-    titulo: str
-    tipo_reporte: str
-    nivel_generado: str
-    puntuacion_global: float
-    total_fortalezas: int
-    total_debilidades: int
-    total_recomendaciones: int
-    tiene_marca_agua: bool
-    fecha_generacion: datetime
-    url_pdf: Optional[str]
-
+    evaluacion: dict
+    organizacion: dict
+    metricas: dict
+    analisis_categorias: dict
+    recomendaciones: List[dict]
+    plan_accion: dict
+    fecha_generacion: str
 
 # Endpoints
-@router.post("/evaluacion/{evaluacion_id}/generar", response_model=ReporteResponse)
-async def generar_reporte_evaluacion(
+@router.get("/evaluacion/{evaluacion_id}")
+async def obtener_reporte_evaluacion(
     evaluacion_id: str,
-    reporte_data: ReporteGenerateRequest,
-    organizacion: Organizacion = Depends(obtener_organizacion_usuario),
     usuario: Usuario = Depends(obtener_usuario_actual_dependencia),
     db: Session = Depends(obtener_sesion)
 ):
-    """Generar reporte de evaluación"""
+    """
+    Obtener reporte de evaluación en formato JSON
     
+    Genera un reporte completo con análisis de ciberseguridad, recomendaciones
+    y plan de acción basado en las respuestas de la evaluación.
+    """
     try:
-        # Verificar que la evaluación existe y está completada
+        # Verificar que la evaluación existe y pertenece a la organización
         evaluacion = db.query(Evaluacion).filter(
             Evaluacion.id == evaluacion_id,
-            Evaluacion.organizacion_id == organizacion.id,
+            Evaluacion.organizacion_id == usuario.organizacion_id,
             Evaluacion.fecha_eliminacion.is_(None)
         ).first()
         
         if not evaluacion:
-            raise ExcepcionRecursoNoEncontrado("Evaluación no encontrada")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evaluación no encontrada"
+            )
         
-        if not evaluacion.esta_completada:
-            raise ExcepcionValidacion("La evaluación debe estar completada para generar el reporte")
+        if evaluacion.estado.value != "completada":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La evaluación debe estar completada para generar el reporte"
+            )
         
-        # Verificar permisos según nivel
-        if reporte_data.incluir_benchmarking and organizacion.nivel_suscripcion == NivelSuscripcion.GRATUITO:
-            raise ExcepcionNivelSuscripcion("El benchmarking está disponible solo en planes Pro+")
+        # Generar reporte
+        reporte_service = ReporteCiberseguridadService(db)
+        reporte = reporte_service.generar_reporte_evaluacion(evaluacion_id)
         
-        if reporte_data.incluir_roadmap and organizacion.nivel_suscripcion == NivelSuscripcion.GRATUITO:
-            raise ExcepcionNivelSuscripcion("El roadmap está disponible solo en planes Pro+")
+        return {
+            "success": True,
+            "data": reporte,
+            "mensaje": "Reporte generado exitosamente"
+        }
         
-        # Generar contenido del reporte
-        from ...servicios.generador_reportes import GeneradorReportesPDF
-        
-        generador = GeneradorReportesPDF(organizacion.nivel_suscripcion)
-        
-        # Obtener recomendaciones según nivel
-        recomendaciones = await generador.obtener_recomendaciones_por_nivel(
-            evaluacion, organizacion.nivel_suscripcion
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generando reporte: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor"
         )
+
+@router.get("/evaluacion/{evaluacion_id}/pdf")
+async def generar_pdf_reporte(
+    evaluacion_id: str,
+    usuario: Usuario = Depends(obtener_usuario_actual_dependencia),
+    db: Session = Depends(obtener_sesion)
+):
+    """
+    Generar y descargar reporte en formato PDF
+    
+    Genera un reporte completo en formato PDF con análisis de ciberseguridad,
+    recomendaciones y plan de acción.
+    """
+    try:
+        # Verificar que la evaluación existe y pertenece a la organización
+        evaluacion = db.query(Evaluacion).filter(
+            Evaluacion.id == evaluacion_id,
+            Evaluacion.organizacion_id == usuario.organizacion_id,
+            Evaluacion.fecha_eliminacion.is_(None)
+        ).first()
+        
+        if not evaluacion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evaluación no encontrada"
+            )
+        
+        if evaluacion.estado.value != "completada":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La evaluación debe estar completada para generar el PDF"
+            )
+        
+        # Generar reporte
+        reporte_service = ReporteCiberseguridadService(db)
+        reporte = reporte_service.generar_reporte_evaluacion(evaluacion_id)
         
         # Generar PDF
-        contenido_pdf = await generador.generar_reporte_evaluacion(
-            evaluacion, recomendaciones, reporte_data.tipo_reporte
+        pdf_content = generar_pdf_reporte(reporte)
+        
+        # Preparar respuesta
+        filename = f"Reporte_Ciberseguridad_{evaluacion.nombre.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_content),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
         
-        # Guardar archivo PDF
-        url_archivo = await generador.guardar_archivo_pdf(contenido_pdf, evaluacion_id)
-        
-        # Crear registro de reporte
-        nuevo_reporte = Reporte(
-            evaluacion_id=evaluacion.id,
-            organizacion_id=organizacion.id,
-            generado_por=usuario.id,
-            tipo_reporte=reporte_data.tipo_reporte,
-            nivel_generado=organizacion.nivel_suscripcion,
-            titulo=f"Reporte de Evaluación - {evaluacion.nombre}",
-            puntuacion_global=evaluacion.puntuacion_global,
-            fortalezas=generador.obtener_fortalezas(evaluacion),
-            debilidades=generador.obtener_debilidades(evaluacion),
-            recomendaciones=recomendaciones,
-            url_pdf=url_archivo,
-            tiene_marca_agua=(organizacion.nivel_suscripcion == NivelSuscripcion.GRATUITO)
-        )
-        
-        db.add(nuevo_reporte)
-        db.commit()
-        db.refresh(nuevo_reporte)
-        
-        # Log de generación
-        LogAuditoria.crear_log(
-            tipo_evento="reporte",
-            accion="generar_reporte",
-            exitoso=True,
-            usuario_id=str(usuario.id),
-            organizacion_id=str(organizacion.id),
-            tipo_recurso="reporte",
-            id_recurso=str(nuevo_reporte.id)
-        )
-        
-        return ReporteResponse(
-            id=str(nuevo_reporte.id),
-            titulo=nuevo_reporte.titulo,
-            tipo_reporte=nuevo_reporte.tipo_reporte,
-            nivel_generado=nuevo_reporte.nivel_generado.value,
-            puntuacion_global=float(nuevo_reporte.puntuacion_global),
-            total_fortalezas=len(nuevo_reporte.fortalezas) if nuevo_reporte.fortalezas else 0,
-            total_debilidades=len(nuevo_reporte.debilidades) if nuevo_reporte.debilidades else 0,
-            total_recomendaciones=len(nuevo_reporte.recomendaciones) if nuevo_reporte.recomendaciones else 0,
-            tiene_marca_agua=nuevo_reporte.tiene_marca_agua,
-            fecha_generacion=nuevo_reporte.fecha_generacion,
-            url_pdf=nuevo_reporte.url_pdf
-        )
-        
-    except (ExcepcionValidacion, ExcepcionRecursoNoEncontrado, ExcepcionNivelSuscripcion):
+    except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        print(f"Error generando PDF: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
 
-
-@router.get("/evaluacion/{evaluacion_id}/puntuacion")
-async def obtener_puntuacion_evaluacion(
-    evaluacion_id: str,
-    organizacion: Organizacion = Depends(obtener_organizacion_usuario),
-    db: Session = Depends(obtener_sesion)
-):
-    """Obtener puntuación de la evaluación"""
+def generar_pdf_reporte(reporte: dict) -> bytes:
+    """Generar PDF del reporte"""
     
-    try:
-        evaluacion = db.query(Evaluacion).filter(
-            Evaluacion.id == evaluacion_id,
-            Evaluacion.organizacion_id == organizacion.id,
-            Evaluacion.fecha_eliminacion.is_(None)
-        ).first()
-        
-        if not evaluacion:
-            raise ExcepcionRecursoNoEncontrado("Evaluación no encontrada")
-        
-        if not evaluacion.esta_completada:
-            raise ExcepcionValidacion("La evaluación debe estar completada")
-        
-        # Obtener puntuaciones según nivel
-        puntuacion_global = float(evaluacion.puntuacion_global) if evaluacion.puntuacion_global else 0.0
-        puntuaciones_dominio = evaluacion.puntuaciones_dominio or {}
-        
-        # Para nivel gratuito, limitar información
-        if organizacion.nivel_suscripcion == NivelSuscripcion.GRATUITO:
-            return {
-                "puntuacion_global": puntuacion_global,
-                "nivel_suscripcion": organizacion.nivel_suscripcion.value,
-                "mensaje": "Actualice a plan Pro para ver análisis detallado"
-            }
-        
-        # Para niveles Pro+, incluir análisis detallado
-        from ...servicios.analisis_evaluacion import AnalizadorEvaluacion
-        
-        analizador = AnalizadorEvaluacion()
-        analisis = await analizador.analizar_evaluacion(evaluacion, organizacion.nivel_suscripcion)
-        
-        return {
-            "puntuacion_global": puntuacion_global,
-            "puntuaciones_dominio": puntuaciones_dominio,
-            "nivel_suscripcion": organizacion.nivel_suscripcion.value,
-            "analisis": analisis
-        }
-        
-    except (ExcepcionValidacion, ExcepcionRecursoNoEncontrado):
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
-        )
-
-
-@router.get("/evaluacion/{evaluacion_id}/recomendaciones")
-async def obtener_recomendaciones_evaluacion(
-    evaluacion_id: str,
-    limite: Optional[int] = None,
-    organizacion: Organizacion = Depends(obtener_organizacion_usuario),
-    db: Session = Depends(obtener_sesion)
-):
-    """Obtener recomendaciones de la evaluación"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*inch)
     
-    try:
-        evaluacion = db.query(Evaluacion).filter(
-            Evaluacion.id == evaluacion_id,
-            Evaluacion.organizacion_id == organizacion.id,
-            Evaluacion.fecha_eliminacion.is_(None)
-        ).first()
-        
-        if not evaluacion:
-            raise ExcepcionRecursoNoEncontrado("Evaluación no encontrada")
-        
-        if not evaluacion.esta_completada:
-            raise ExcepcionValidacion("La evaluación debe estar completada")
-        
-        # Obtener recomendaciones según nivel
-        from ...servicios.generador_reportes import GeneradorReportesPDF
-        
-        generador = GeneradorReportesPDF(organizacion.nivel_suscripcion)
-        recomendaciones = await generador.obtener_recomendaciones_por_nivel(
-            evaluacion, organizacion.nivel_suscripcion
-        )
-        
-        # Aplicar límite según nivel
-        if organizacion.nivel_suscripcion == NivelSuscripcion.GRATUITO:
-            limite = min(limite or 3, 3)  # Máximo 3 para gratuito
-        else:
-            limite = limite or len(recomendaciones)
-        
-        recomendaciones_limitadas = recomendaciones[:limite]
-        
-        return {
-            "recomendaciones": recomendaciones_limitadas,
-            "total_disponibles": len(recomendaciones),
-            "mostradas": len(recomendaciones_limitadas),
-            "nivel_suscripcion": organizacion.nivel_suscripcion.value
-        }
-        
-    except (ExcepcionValidacion, ExcepcionRecursoNoEncontrado):
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
-        )
-
-
-@router.get("/evaluacion/{evaluacion_id}/benchmarks")
-async def obtener_benchmarks_evaluacion(
-    evaluacion_id: str,
-    organizacion: Organizacion = Depends(verificar_nivel_suscripcion(NivelSuscripcion.PRO)),
-    db: Session = Depends(obtener_sesion)
-):
-    """Obtener benchmarks de la evaluación (solo Pro+)"""
+    # Estilos
+    styles = getSampleStyleSheet()
     
-    try:
-        evaluacion = db.query(Evaluacion).filter(
-            Evaluacion.id == evaluacion_id,
-            Evaluacion.organizacion_id == organizacion.id,
-            Evaluacion.fecha_eliminacion.is_(None)
-        ).first()
-        
-        if not evaluacion:
-            raise ExcepcionRecursoNoEncontrado("Evaluación no encontrada")
-        
-        if not evaluacion.esta_completada:
-            raise ExcepcionValidacion("La evaluación debe estar completada")
-        
-        # Obtener benchmarks
-        from ...servicios.benchmarking import ServicioBenchmarking
-        
-        servicio_benchmark = ServicioBenchmarking()
-        benchmarks = await servicio_benchmark.obtener_benchmarks_organizacion(
-            evaluacion, organizacion
-        )
-        
-        return {
-            "evaluacion_id": str(evaluacion.id),
-            "benchmarks": benchmarks,
-            "nivel_suscripcion": organizacion.nivel_suscripcion.value
-        }
-        
-    except (ExcepcionValidacion, ExcepcionRecursoNoEncontrado):
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
-        )
-
-
-@router.get("/evaluacion/{evaluacion_id}/exportar/excel")
-async def exportar_evaluacion_excel(
-    evaluacion_id: str,
-    organizacion: Organizacion = Depends(verificar_nivel_suscripcion(NivelSuscripcion.EMPRESARIAL)),
-    db: Session = Depends(obtener_sesion)
-):
-    """Exportar evaluación a Excel (solo Empresarial)"""
+    # Estilos personalizados
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=30,
+        alignment=TA_CENTER,
+        textColor=colors.darkblue
+    )
     
-    try:
-        evaluacion = db.query(Evaluacion).filter(
-            Evaluacion.id == evaluacion_id,
-            Evaluacion.organizacion_id == organizacion.id,
-            Evaluacion.fecha_eliminacion.is_(None)
-        ).first()
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceAfter=12,
+        spaceBefore=12,
+        textColor=colors.darkblue
+    )
+    
+    subheading_style = ParagraphStyle(
+        'CustomSubHeading',
+        parent=styles['Heading3'],
+        fontSize=12,
+        spaceAfter=8,
+        spaceBefore=8,
+        textColor=colors.darkgreen
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=6
+    )
+    
+    # Contenido del PDF
+    story = []
+    
+    # Portada
+    story.append(Paragraph("REPORTE DE EVALUACIÓN DE CIBERSEGURIDAD", title_style))
+    story.append(Spacer(1, 20))
+    
+    # Información de la evaluación
+    eval_info = reporte["evaluacion"]
+    org_info = reporte["organizacion"]
+    
+    info_data = [
+        ["Organización:", org_info["nombre"]],
+        ["Evaluación:", eval_info["nombre"]],
+        ["Framework:", eval_info["framework"]],
+        ["Nivel:", eval_info["nivel_usado"].upper()],
+        ["Fecha de Evaluación:", datetime.fromisoformat(eval_info["fecha_completada"]).strftime("%d/%m/%Y")],
+        ["Fecha de Reporte:", datetime.fromisoformat(reporte["fecha_generacion"]).strftime("%d/%m/%Y %H:%M")]
+    ]
+    
+    info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+    ]))
+    
+    story.append(info_table)
+    story.append(PageBreak())
+    
+    # Resumen Ejecutivo
+    story.append(Paragraph("RESUMEN EJECUTIVO", heading_style))
+    
+    metricas = reporte["metricas"]
+    nivel_madurez = metricas["nivel_madurez"]
+    porcentaje = metricas["porcentaje_logrado"]
+    
+    resumen_text = f"""
+    Su organización ha alcanzado un nivel de madurez en ciberseguridad de <b>{nivel_madurez}</b> 
+    con una puntuación general de <b>{porcentaje:.1f}%</b>.
+    
+    Este reporte proporciona un análisis detallado de su postura de seguridad, identificando 
+    fortalezas, áreas de mejora y recomendaciones específicas para fortalecer su programa 
+    de ciberseguridad.
+    """
+    
+    story.append(Paragraph(resumen_text, normal_style))
+    story.append(Spacer(1, 12))
+    
+    # Métricas principales
+    story.append(Paragraph("MÉTRICAS PRINCIPALES", subheading_style))
+    
+    metricas_data = [
+        ["Métrica", "Valor"],
+        ["Puntuación Promedio", f"{metricas['puntuacion_promedio']}/5.0"],
+        ["Porcentaje Logrado", f"{metricas['porcentaje_logrado']:.1f}%"],
+        ["Nivel de Madurez", nivel_madurez],
+        ["Total de Preguntas", str(metricas['total_respuestas'])],
+        ["Puntuación Total", f"{metricas['puntuacion_total']}/{metricas['puntuacion_maxima']}"]
+    ]
+    
+    metricas_table = Table(metricas_data, colWidths=[3*inch, 2*inch])
+    metricas_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (1, 1), (1, -1), colors.lightblue),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    
+    story.append(metricas_table)
+    story.append(PageBreak())
+    
+    # Análisis por Categorías
+    story.append(Paragraph("ANÁLISIS POR CATEGORÍAS", heading_style))
+    
+    categorias = reporte["analisis_categorias"]
+    for categoria, datos in categorias.items():
+        story.append(Paragraph(f"{categoria.upper()}", subheading_style))
         
-        if not evaluacion:
-            raise ExcepcionRecursoNoEncontrado("Evaluación no encontrada")
+        categoria_text = f"""
+        <b>Puntuación:</b> {datos['puntuacion_total']}/{datos['puntuacion_maxima']} 
+        ({datos['porcentaje']:.1f}%)
         
-        if not evaluacion.esta_completada:
-            raise ExcepcionValidacion("La evaluación debe estar completada")
+        <b>Fortalezas:</b> {len(datos['fortalezas'])} áreas bien implementadas
+        <b>Debilidades:</b> {len(datos['debilidades'])} áreas que requieren atención
+        """
         
-        # Generar archivo Excel
-        from ...servicios.exportador_excel import ExportadorExcel
+        story.append(Paragraph(categoria_text, normal_style))
+        story.append(Spacer(1, 8))
+    
+    story.append(PageBreak())
+    
+    # Recomendaciones Prioritarias
+    story.append(Paragraph("RECOMENDACIONES PRIORITARIAS", heading_style))
+    
+    recomendaciones = reporte["recomendaciones"][:5]  # Top 5
+    
+    for i, rec in enumerate(recomendaciones, 1):
+        story.append(Paragraph(f"{i}. {rec['accion']}", subheading_style))
         
-        exportador = ExportadorExcel()
-        archivo_excel = await exportador.exportar_evaluacion_completa(evaluacion)
+        rec_text = f"""
+        <b>Categoría:</b> {rec['categoria']}
+        <b>Nivel de Criticidad:</b> {rec['nivel_criticidad']}
+        <b>Tiempo Estimado:</b> {rec['tiempo_estimado']}
+        <b>Costo:</b> {rec['costo']}
+        <b>Prioridad:</b> {rec['prioridad']}/10
         
-        # Log de exportación
-        LogAuditoria.crear_log(
-            tipo_evento="reporte",
-            accion="exportar_excel",
-            exitoso=True,
-            organizacion_id=str(organizacion.id),
-            tipo_recurso="evaluacion",
-            id_recurso=str(evaluacion.id)
-        )
+        <b>Descripción:</b> {rec['descripcion']}
         
-        return {
-            "mensaje": "Archivo Excel generado exitosamente",
-            "url_descarga": archivo_excel["url"],
-            "tamaño_archivo": archivo_excel["tamaño"],
-            "fecha_generacion": datetime.utcnow()
-        }
+        <b>Beneficio:</b> {rec['beneficio']}
+        """
         
-    except (ExcepcionValidacion, ExcepcionRecursoNoEncontrado):
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
-        )
+        story.append(Paragraph(rec_text, normal_style))
+        
+        # Pasos concretos
+        if rec.get('pasos_concretos'):
+            story.append(Paragraph("<b>Pasos Concretos:</b>", normal_style))
+            for paso in rec['pasos_concretos']:
+                story.append(Paragraph(f"• {paso}", normal_style))
+        
+        story.append(Spacer(1, 12))
+    
+    story.append(PageBreak())
+    
+    # Plan de Acción
+    story.append(Paragraph("PLAN DE ACCIÓN", heading_style))
+    
+    plan = reporte["plan_accion"]
+    
+    # Resumen del plan
+    resumen_plan = f"""
+    <b>Total de Recomendaciones:</b> {plan['resumen']['total_recomendaciones']}
+    <b>Críticas:</b> {plan['resumen']['criticas']}
+    <b>Importantes:</b> {plan['resumen']['importantes']}
+    <b>Mejoras:</b> {plan['resumen']['mejoras']}
+    """
+    
+    story.append(Paragraph(resumen_plan, normal_style))
+    story.append(Spacer(1, 12))
+    
+    # Cronograma
+    story.append(Paragraph("CRONOGRAMA DE IMPLEMENTACIÓN", subheading_style))
+    
+    for fase in plan['cronograma']:
+        story.append(Paragraph(fase['fase'], subheading_style))
+        story.append(Paragraph(fase['descripcion'], normal_style))
+        story.append(Paragraph(f"<b>Inversión:</b> {fase['inversion']}", normal_style))
+        story.append(Spacer(1, 8))
+    
+    # Inversión estimada
+    if 'inversion_estimada' in plan:
+        inv = plan['inversion_estimada']
+        story.append(Paragraph("INVERSIÓN ESTIMADA", subheading_style))
+        
+        inv_text = f"""
+        <b>Inversión Total:</b> ${inv['total_clp']:,.0f} CLP (${inv['total_usd']:,.0f} USD)
+        <b>Período:</b> {inv['periodo']}
+        """
+        
+        story.append(Paragraph(inv_text, normal_style))
+    
+    # ROI proyectado
+    if 'roi_proyectado' in plan:
+        roi = plan['roi_proyectado']
+        story.append(Paragraph("ROI PROYECTADO", subheading_style))
+        
+        roi_text = f"""
+        <b>Reducción de Riesgo:</b> {roi['reduccion_riesgo']:.0f}%
+        <b>Beneficio Anual Proyectado:</b> ${roi['beneficio_anual_clp']:,.0f} CLP
+        <b>ROI:</b> {roi['roi_porcentaje']:.1f}%
+        <b>Período de Recuperación:</b> {roi['periodo_recuperacion']:.1f} meses
+        """
+        
+        story.append(Paragraph(roi_text, normal_style))
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    
+    return buffer.getvalue()

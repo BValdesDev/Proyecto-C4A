@@ -34,10 +34,13 @@ interface LoginData {
 interface AuthContextType {
   usuario: Usuario | null
   token: string | null
+  refreshToken: string | null
   login: (data: LoginData) => Promise<void>
   logout: () => void
+  refreshAuthToken: () => Promise<boolean>
   loading: boolean
   error: string | null
+  isTokenExpired: boolean
 }
 
 // Contexto
@@ -47,21 +50,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [refreshToken, setRefreshToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isTokenExpired, setIsTokenExpired] = useState(false)
   const navigate = useNavigate()
 
-  // Cargar token del localStorage al inicializar
+  // Cargar tokens del localStorage al inicializar
   useEffect(() => {
     const savedToken = localStorage.getItem('c4a_token')
-    if (savedToken) {
+    const savedRefreshToken = localStorage.getItem('c4a_refresh_token')
+    
+    if (savedToken && savedRefreshToken) {
       setToken(savedToken)
+      setRefreshToken(savedRefreshToken)
       // Verificar si el token es válido
       verificarToken(savedToken)
     }
   }, [])
 
-  // Configurar interceptor de axios para incluir token
+  // Configurar interceptor de axios para incluir token y manejar renovación automática
   useEffect(() => {
     if (token) {
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -70,20 +78,71 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [token])
 
+  // Interceptor para manejar errores 401 y renovar tokens automáticamente
+  useEffect(() => {
+    const interceptor = apiClient.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config
+        
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true
+          
+          // Intentar renovar el token
+          const success = await refreshAuthToken()
+          if (success) {
+            // Reintentar la petición original con el nuevo token
+            originalRequest.headers['Authorization'] = `Bearer ${token}`
+            return apiClient(originalRequest)
+          } else {
+            // Si no se puede renovar, hacer logout
+            logout()
+            return Promise.reject(error)
+          }
+        }
+        
+        return Promise.reject(error)
+      }
+    )
+
+    return () => {
+      apiClient.interceptors.response.eject(interceptor)
+    }
+  }, [token, refreshToken])
+
   const verificarToken = async (tokenToVerify: string) => {
     try {
       setLoading(true)
+      setIsTokenExpired(false)
+      
       const response = await apiClient.get('/api/v1/auth/mi-perfil', {
         headers: { Authorization: `Bearer ${tokenToVerify}` }
       })
       
       setUsuario(response.data)
       setError(null)
-    } catch (err) {
-      // Token inválido, limpiar
-      localStorage.removeItem('c4a_token')
-      setToken(null)
-      setUsuario(null)
+    } catch (err: any) {
+      // Token inválido o expirado
+      if (err.response?.status === 401) {
+        setIsTokenExpired(true)
+        // Intentar renovar con refresh token
+        const success = await refreshAuthToken()
+        if (!success) {
+          // Si no se puede renovar, limpiar todo
+          localStorage.removeItem('c4a_token')
+          localStorage.removeItem('c4a_refresh_token')
+          setToken(null)
+          setRefreshToken(null)
+          setUsuario(null)
+        }
+      } else {
+        // Otro tipo de error
+        localStorage.removeItem('c4a_token')
+        localStorage.removeItem('c4a_refresh_token')
+        setToken(null)
+        setRefreshToken(null)
+        setUsuario(null)
+      }
     } finally {
       setLoading(false)
     }
@@ -93,13 +152,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true)
       setError(null)
+      setIsTokenExpired(false)
 
       const response = await apiClient.post('/api/v1/auth/iniciar-sesion', data)
-      const { access_token, usuario: usuarioData } = response.data
+      const { access_token, refresh_token, usuario: usuarioData } = response.data
 
-      // Guardar token
+      // Guardar tokens
       localStorage.setItem('c4a_token', access_token)
+      localStorage.setItem('c4a_refresh_token', refresh_token)
       setToken(access_token)
+      setRefreshToken(refresh_token)
       setUsuario(usuarioData)
 
       toast.success(`¡Bienvenido, ${usuarioData.nombres}!`)
@@ -107,7 +169,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Redirigir al dashboard
       navigate('/app/dashboard')
     } catch (err: any) {
-      const errorMessage = err.response?.data?.mensaje || 'Error al iniciar sesión'
+      const errorMessage = err.response?.data?.detail || err.response?.data?.mensaje || 'Error al iniciar sesión'
       setError(errorMessage)
       toast.error(errorMessage)
       throw err
@@ -116,27 +178,67 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }
 
-  const logout = () => {
-    // Limpiar estado
-    localStorage.removeItem('c4a_token')
-    setToken(null)
-    setUsuario(null)
-    setError(null)
-    
-    // Limpiar headers de axios
-    delete apiClient.defaults.headers.common['Authorization']
-    
-    toast.success('Sesión cerrada exitosamente')
-    navigate('/')
+  const refreshAuthToken = async (): Promise<boolean> => {
+    if (!refreshToken) {
+      return false
+    }
+
+    try {
+      const response = await apiClient.post('/api/v1/auth/renovar-token', {
+        refresh_token: refreshToken
+      })
+
+      const { access_token } = response.data
+      
+      // Actualizar token
+      localStorage.setItem('c4a_token', access_token)
+      setToken(access_token)
+      setIsTokenExpired(false)
+      
+      return true
+    } catch (err) {
+      // Refresh token inválido o expirado
+      console.error('Error renovando token:', err)
+      return false
+    }
+  }
+
+  const logout = async () => {
+    try {
+      // Intentar cerrar sesión en el servidor
+      if (token) {
+        await apiClient.post('/api/v1/auth/cerrar-sesion')
+      }
+    } catch (err) {
+      console.error('Error cerrando sesión en servidor:', err)
+    } finally {
+      // Limpiar estado local siempre
+      localStorage.removeItem('c4a_token')
+      localStorage.removeItem('c4a_refresh_token')
+      setToken(null)
+      setRefreshToken(null)
+      setUsuario(null)
+      setError(null)
+      setIsTokenExpired(false)
+      
+      // Limpiar headers de axios
+      delete apiClient.defaults.headers.common['Authorization']
+      
+      toast.success('Sesión cerrada exitosamente')
+      navigate('/')
+    }
   }
 
   const value: AuthContextType = {
     usuario,
     token,
+    refreshToken,
     login,
     logout,
+    refreshAuthToken,
     loading,
-    error
+    error,
+    isTokenExpired
   }
 
   return (

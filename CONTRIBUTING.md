@@ -21,6 +21,67 @@ Este documento describe cómo contribuir al proyecto C4A SaaS, una plataforma de
 
 ---
 
+## 🌳 **Git Flow - IMPORTANTE**
+
+**Este proyecto utiliza Git Flow** para mantener un desarrollo organizado. Por favor, lee esta sección antes de contribuir.
+
+### **Ramas Principales:**
+- **`main`**: Código en producción (⛔ protegida, no hacer commits directos)
+- **`develop`**: Rama de desarrollo e integración
+
+### **Ramas Temporales:**
+- **`feature/*`**: Nuevas funcionalidades → merge a `develop`
+- **`bugfix/*`**: Corrección de bugs → merge a `develop`
+- **`hotfix/*`**: Correcciones urgentes → merge a `main` y `develop`
+- **`release/*`**: Preparación de releases → merge a `main` y `develop`
+
+### **Guía Rápida:**
+
+```bash
+# 1. Crear una nueva feature
+git checkout develop
+git pull origin develop
+git checkout -b feature/nombre-descriptivo
+
+# 2. Trabajar en tu feature
+git add .
+git commit -m "feat: descripción del cambio"
+
+# 3. Subir y crear PR
+git push origin feature/nombre-descriptivo
+# Crear Pull Request en GitHub: feature/nombre → develop
+```
+
+### **Scripts Helper:**
+Hemos creado scripts para facilitar Git Flow:
+
+**Windows:**
+```powershell
+.\scripts\gitflow-helper.ps1 -Action feature -Name mi-feature
+.\scripts\gitflow-helper.ps1 -Action finish
+```
+
+**Linux/Mac:**
+```bash
+./scripts/gitflow-helper.sh feature mi-feature
+./scripts/gitflow-helper.sh finish
+```
+
+### **Convenciones de Commits:**
+```
+feat: nueva funcionalidad
+fix: corrección de bug
+docs: documentación
+style: formato
+refactor: refactorización
+test: tests
+chore: build, deps, etc.
+```
+
+📖 **Documentación completa**: [GITFLOW.md](./GITFLOW.md)
+
+---
+
 ## 🚀 **Configuración del Entorno**
 
 ### **Requisitos Previos:**

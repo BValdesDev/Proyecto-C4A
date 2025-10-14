@@ -98,7 +98,16 @@ class Organizacion(ModeloConEliminacionLogica):
             return True
         
         from datetime import datetime
-        return datetime.utcnow() > self.fecha_vencimiento_suscripcion
+        ahora = datetime.utcnow()
+        # Asegurar que ambas fechas tengan el mismo timezone
+        if self.fecha_vencimiento_suscripcion.tzinfo is None:
+            ahora = ahora.replace(tzinfo=None)
+        else:
+            # Si la fecha de vencimiento tiene timezone, convertir ahora a timezone-naive
+            ahora = ahora.replace(tzinfo=None)
+            vencimiento = self.fecha_vencimiento_suscripcion.replace(tzinfo=None)
+            return ahora > vencimiento
+        return ahora > self.fecha_vencimiento_suscripcion
     
     @property
     def puede_crear_evaluacion(self) -> bool:
@@ -108,11 +117,12 @@ class Organizacion(ModeloConEliminacionLogica):
         
         # Contar evaluaciones del mes actual
         from datetime import datetime, timedelta
-        inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        ahora = datetime.utcnow().replace(tzinfo=None)
+        inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         evaluaciones_mes = len([
             e for e in self.evaluaciones 
-            if e.fecha_creacion >= inicio_mes and e.fecha_eliminacion is None
+            if e.fecha_creacion.replace(tzinfo=None) >= inicio_mes and e.fecha_eliminacion is None
         ])
         
         return evaluaciones_mes < self.maximo_evaluaciones_por_mes
@@ -140,11 +150,11 @@ class Organizacion(ModeloConEliminacionLogica):
         """Obtener uso del mes actual"""
         from datetime import datetime, timedelta
         
-        inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        inicio_mes = datetime.utcnow().replace(tzinfo=None, day=1, hour=0, minute=0, second=0, microsecond=0)
         
         evaluaciones_mes = len([
             e for e in self.evaluaciones 
-            if e.fecha_creacion >= inicio_mes and e.fecha_eliminacion is None
+            if e.fecha_creacion.replace(tzinfo=None) >= inicio_mes and e.fecha_eliminacion is None
         ])
         
         usuarios_activos = len([u for u in self.usuarios if u.fecha_eliminacion is None])

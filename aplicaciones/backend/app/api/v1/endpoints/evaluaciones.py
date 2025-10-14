@@ -375,21 +375,35 @@ async def obtener_preguntas_evaluacion(
                 detail="Evaluación no encontrada"
             )
         
-        # Obtener preguntas del framework y nivel
-        # Mapear nivel_usado a la clave en disponibilidad_por_nivel
-        nivel_key = "gratuito"  # Por defecto
-        if evaluacion.nivel_usado.value == "GRATUITO":
-            nivel_key = "gratuito"
-        elif evaluacion.nivel_usado.value == "PROFESIONAL":
-            nivel_key = "pro"
-        elif evaluacion.nivel_usado.value == "EMPRESARIAL":
-            nivel_key = "empresarial"
+        # Obtener preguntas del framework según el nivel de suscripción
+        # Para nivel empresarial: incluir todas las preguntas (gratuito + pro + empresarial)
+        # Para nivel pro: incluir preguntas gratuito + pro
+        # Para nivel gratuito: solo preguntas gratuito
         
-        preguntas = db.query(Pregunta).filter(
-            Pregunta.framework_id == evaluacion.framework_id,
-            Pregunta.disponibilidad_por_nivel[nivel_key].astext == "true",
-            Pregunta.esta_activa == True
-        ).order_by(Pregunta.orden).all()
+        if evaluacion.nivel_usado.value == "EMPRESARIAL":
+            # Nivel empresarial: incluir TODAS las preguntas
+            preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                Pregunta.esta_activa == True
+            ).order_by(Pregunta.orden).all()
+        elif evaluacion.nivel_usado.value == "PROFESIONAL":
+            # Nivel pro: incluir preguntas gratuito + pro
+            from sqlalchemy import or_
+            preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                or_(
+                    Pregunta.disponibilidad_por_nivel["gratuito"].astext == "true",
+                    Pregunta.disponibilidad_por_nivel["pro"].astext == "true"
+                ),
+                Pregunta.esta_activa == True
+            ).order_by(Pregunta.orden).all()
+        else:
+            # Nivel gratuito: solo preguntas gratuito
+            preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                Pregunta.disponibilidad_por_nivel["gratuito"].astext == "true",
+                Pregunta.esta_activa == True
+            ).order_by(Pregunta.orden).all()
         
         # Formatear respuesta
         preguntas_response = []
@@ -400,7 +414,7 @@ async def obtener_preguntas_evaluacion(
                 "texto_pregunta": pregunta.texto_pregunta,
                 "texto_ayuda": pregunta.texto_ayuda,
                 "categoria": pregunta.categoria,
-                "nivel": nivel_key,
+                "nivel": evaluacion.nivel_usado.value.lower(),
                 "tipo": pregunta.tipo_respuesta,
                 "opciones": []  # Las opciones se generan dinámicamente según tipo_respuesta
             })
@@ -483,21 +497,31 @@ async def guardar_respuestas(
                 
                 respuestas_guardadas += 1
         
-        # Actualizar progreso de la evaluación
-        # Mapear nivel_usado a la clave en disponibilidad_por_nivel
-        nivel_key = "gratuito"  # Por defecto
-        if evaluacion.nivel_usado.value == "GRATUITO":
-            nivel_key = "gratuito"
+        # Actualizar progreso de la evaluación según el nivel
+        if evaluacion.nivel_usado.value == "EMPRESARIAL":
+            # Nivel empresarial: contar TODAS las preguntas
+            total_preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                Pregunta.esta_activa == True
+            ).count()
         elif evaluacion.nivel_usado.value == "PROFESIONAL":
-            nivel_key = "pro"
-        elif evaluacion.nivel_usado.value == "EMPRESARIAL":
-            nivel_key = "empresarial"
-        
-        total_preguntas = db.query(Pregunta).filter(
-            Pregunta.framework_id == evaluacion.framework_id,
-            Pregunta.disponibilidad_por_nivel[nivel_key].astext == "true",
-            Pregunta.esta_activa == True
-        ).count()
+            # Nivel pro: contar preguntas gratuito + pro
+            from sqlalchemy import or_
+            total_preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                or_(
+                    Pregunta.disponibilidad_por_nivel["gratuito"].astext == "true",
+                    Pregunta.disponibilidad_por_nivel["pro"].astext == "true"
+                ),
+                Pregunta.esta_activa == True
+            ).count()
+        else:
+            # Nivel gratuito: contar solo preguntas gratuito
+            total_preguntas = db.query(Pregunta).filter(
+                Pregunta.framework_id == evaluacion.framework_id,
+                Pregunta.disponibilidad_por_nivel["gratuito"].astext == "true",
+                Pregunta.esta_activa == True
+            ).count()
         
         evaluacion.preguntas_completadas = respuestas_guardadas
         porcentaje_completado = (respuestas_guardadas / total_preguntas * 100) if total_preguntas > 0 else 0
@@ -537,7 +561,7 @@ async def finalizar_evaluacion(
     usuario: Usuario = Depends(obtener_usuario_actual_dependencia),
     db: Session = Depends(obtener_sesion)
 ):
-    """Finalizar evaluación manualmente"""
+    """Finalizar evaluación manualmente y generar resumen"""
     
     try:
         # Verificar que la evaluación existe y pertenece a la organización
@@ -557,13 +581,50 @@ async def finalizar_evaluacion(
         evaluacion.estado = EstadoEvaluacion.COMPLETADA
         evaluacion.fecha_completada = datetime.now()
         
+        # Calcular puntuación global si no existe
+        if not evaluacion.puntuacion_global:
+            # Obtener respuestas para calcular puntuación
+            respuestas = db.query(Respuesta).filter(
+                Respuesta.evaluacion_id == evaluacion_id
+            ).all()
+            
+            if respuestas:
+                puntuacion_total = sum(r.valor for r in respuestas)
+                puntuacion_maxima = len(respuestas) * 5
+                evaluacion.puntuacion_global = (puntuacion_total / puntuacion_maxima) * 100 if puntuacion_maxima > 0 else 0
+        
         db.commit()
         
+        # Generar resumen rápido del reporte
+        from app.servicios.reporte_service import ReporteCiberseguridadService
+        reporte_service = ReporteCiberseguridadService(db)
+        
+        try:
+            reporte = reporte_service.generar_reporte_evaluacion(evaluacion_id)
+            resumen = {
+                "puntuacion_general": reporte["metricas"]["porcentaje_logrado"],
+                "nivel_madurez": reporte["metricas"]["nivel_madurez"],
+                "recomendaciones_criticas": len([r for r in reporte["recomendaciones"] if r["prioridad"] >= 8]),
+                "total_recomendaciones": len(reporte["recomendaciones"])
+            }
+        except Exception as e:
+            print(f"Error generando resumen del reporte: {e}")
+            resumen = {
+                "puntuacion_general": evaluacion.puntuacion_global or 0,
+                "nivel_madurez": "BÁSICO",
+                "recomendaciones_criticas": 0,
+                "total_recomendaciones": 0
+            }
+        
         return {
+            "success": True,
             "mensaje": "Evaluacion finalizada exitosamente",
             "evaluacion_id": evaluacion_id,
             "estado": evaluacion.estado.value,
-            "fecha_completada": evaluacion.fecha_completada.isoformat()
+            "fecha_completada": evaluacion.fecha_completada.isoformat(),
+            "puntuacion_global": evaluacion.puntuacion_global,
+            "resumen": resumen,
+            "redireccion": "/app/dashboard"
         }
         
     except HTTPException:
