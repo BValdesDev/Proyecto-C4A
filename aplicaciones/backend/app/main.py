@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 from .core.config import config
 from .core.excepciones import ExcepcionC4A, convertir_excepcion_c4a_a_http
-from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, dashboard
+from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, dashboard, admin
 from .modelos.base import crear_tablas
 
 
@@ -244,6 +244,12 @@ app.include_router(
     dashboard.router,
     prefix="/api/v1/dashboard",
     tags=["Dashboard"]
+)
+
+app.include_router(
+    admin.router,
+    prefix="/api/v1/admin",
+    tags=["Administración"]
 )
 
 
