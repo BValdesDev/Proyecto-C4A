@@ -1,32 +1,154 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, FileText, CreditCard, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Users, FileText, CreditCard, TrendingUp, AlertCircle, CheckCircle, Download, Plus, RefreshCw } from 'lucide-react';
+import { apiClient } from '@/utilidades/apiClient';
 
 interface DashboardStats {
   totalUsers: number;
   activeUsers: number;
   totalDiagnostics: number;
-  monthlyRevenue: number;
-  pendingDiagnostics: number;
   completedDiagnostics: number;
+  pendingDiagnostics: number;
+  monthlyRevenue: number;
+  completionRate: number;
+  growthRate: number;
 }
 
 const AdminDashboardPage: React.FC = () => {
-  // TODO: Conectar con API real
-  const stats: DashboardStats = {
-    totalUsers: 1247,
-    activeUsers: 892,
-    totalDiagnostics: 3456,
-    monthlyRevenue: 2845000, // CLP
-    pendingDiagnostics: 23,
-    completedDiagnostics: 3433,
-  };
+  const navigate = useNavigate();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalDiagnostics: 0,
+    completedDiagnostics: 0,
+    pendingDiagnostics: 0,
+    monthlyRevenue: 0,
+    completionRate: 0,
+    growthRate: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get('/api/v1/admin/dashboard/stats');
+        setStats(response.data);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching dashboard stats:', err);
+        setError(err.response?.data?.detail || 'Error al cargar estadísticas');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CL', {
       style: 'currency',
       currency: 'CLP',
     }).format(amount);
+  };
+
+  // Funciones para acciones rápidas
+  const handleExportUsers = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/admin/users/export', {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `usuarios_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error al exportar usuarios:', error);
+      alert('Error al exportar usuarios. Inténtalo de nuevo.');
+    }
+  };
+
+  const handleExportDiagnostics = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/admin/diagnostics/export', {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `diagnosticos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error al exportar diagnósticos:', error);
+      alert('Error al exportar diagnósticos. Inténtalo de nuevo.');
+    }
+  };
+
+  const handleSyncPayments = async () => {
+    try {
+      await apiClient.post('/api/v1/admin/payments/sync');
+      alert('Sincronización de pagos completada exitosamente');
+    } catch (error) {
+      console.error('Error al sincronizar pagos:', error);
+      alert('Error al sincronizar pagos. Inténtalo de nuevo.');
+    }
+  };
+
+  const handleExportPayments = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/admin/payments/export', {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pagos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error al exportar pagos:', error);
+      alert('Error al exportar pagos. Inténtalo de nuevo.');
+    }
+  };
+
+  const handleExportAnalytics = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/admin/analytics/export', {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `analytics_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error al exportar analytics:', error);
+      alert('Error al exportar analytics. Inténtalo de nuevo.');
+    }
   };
 
   const StatCard = ({ 
@@ -69,6 +191,41 @@ const AdminDashboardPage: React.FC = () => {
       </Card>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
+          <p className="text-gray-600 mt-2">Cargando estadísticas...</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </CardHeader>
+              <CardContent className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
+          <p className="text-red-600 mt-2">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -116,7 +273,7 @@ const AdminDashboardPage: React.FC = () => {
         
         <StatCard
           title="Tasa de Completación"
-          value="99.3%"
+          value={`${stats.completionRate}%`}
           icon={CheckCircle}
           color="green"
           subtitle="Diagnósticos completados"
@@ -124,7 +281,7 @@ const AdminDashboardPage: React.FC = () => {
         
         <StatCard
           title="Crecimiento Mensual"
-          value="+12.5%"
+          value={`${stats.growthRate > 0 ? '+' : ''}${stats.growthRate}%`}
           icon={TrendingUp}
           color="blue"
           subtitle="Usuarios nuevos"
@@ -138,25 +295,111 @@ const AdminDashboardPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button className="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <Users className="h-5 w-5 mr-2 text-blue-600" />
-              <span className="text-sm font-medium">Gestionar Usuarios</span>
-            </button>
+            {/* Gestionar Usuarios */}
+            <div className="space-y-2">
+              <Button 
+                onClick={() => navigate('/admin/users')}
+                className="w-full flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                variant="outline"
+              >
+                <Users className="h-5 w-5 mr-2 text-blue-600" />
+                <span className="text-sm font-medium">Gestionar Usuarios</span>
+              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleExportUsers}
+                  size="sm" 
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Exportar
+                </Button>
+                <Button 
+                  onClick={() => navigate('/admin/users')}
+                  size="sm" 
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nuevo
+                </Button>
+              </div>
+            </div>
             
-            <button className="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <FileText className="h-5 w-5 mr-2 text-green-600" />
-              <span className="text-sm font-medium">Ver Diagnósticos</span>
-            </button>
+            {/* Ver Diagnósticos */}
+            <div className="space-y-2">
+              <Button 
+                onClick={() => navigate('/admin/diagnostics')}
+                className="w-full flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                variant="outline"
+              >
+                <FileText className="h-5 w-5 mr-2 text-green-600" />
+                <span className="text-sm font-medium">Ver Diagnósticos</span>
+              </Button>
+              <Button 
+                onClick={handleExportDiagnostics}
+                size="sm" 
+                variant="outline"
+                className="w-full"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Exportar Datos
+              </Button>
+            </div>
             
-            <button className="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <CreditCard className="h-5 w-5 mr-2 text-purple-600" />
-              <span className="text-sm font-medium">Gestión de Pagos</span>
-            </button>
+            {/* Gestión de Pagos */}
+            <div className="space-y-2">
+              <Button 
+                onClick={() => navigate('/admin/payments')}
+                className="w-full flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                variant="outline"
+              >
+                <CreditCard className="h-5 w-5 mr-2 text-purple-600" />
+                <span className="text-sm font-medium">Gestión de Pagos</span>
+              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleSyncPayments}
+                  size="sm" 
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Sincronizar
+                </Button>
+                <Button 
+                  onClick={handleExportPayments}
+                  size="sm" 
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Exportar
+                </Button>
+              </div>
+            </div>
             
-            <button className="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <TrendingUp className="h-5 w-5 mr-2 text-orange-600" />
-              <span className="text-sm font-medium">Ver Analytics</span>
-            </button>
+            {/* Ver Analytics */}
+            <div className="space-y-2">
+              <Button 
+                onClick={() => navigate('/admin/analytics')}
+                className="w-full flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                variant="outline"
+              >
+                <TrendingUp className="h-5 w-5 mr-2 text-orange-600" />
+                <span className="text-sm font-medium">Ver Analytics</span>
+              </Button>
+              <Button 
+                onClick={handleExportAnalytics}
+                size="sm" 
+                variant="outline"
+                className="w-full"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Exportar Reporte
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -202,3 +445,4 @@ const AdminDashboardPage: React.FC = () => {
 };
 
 export default AdminDashboardPage;
+

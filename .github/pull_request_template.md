@@ -59,3 +59,4 @@ Antes de crear este PR, verifica que:
 - **Rama destino**: <!-- develop o main -->
 - **Versión afectada**: <!-- Si aplica -->
 
+

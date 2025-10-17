@@ -7,11 +7,18 @@ interface ProtectedAdminRouteProps {
 }
 
 const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({ children }) => {
-  const { user, isLoading } = useAuth();
+  const { usuario, loading, isAdmin } = useAuth();
   const location = useLocation();
 
+  console.log('🔍 Debug ProtectedAdminRoute:', {
+    usuario,
+    loading,
+    isAdmin: isAdmin(),
+    location: location.pathname
+  });
+
   // Mostrar loading mientras se verifica la autenticación
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -20,15 +27,14 @@ const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({ children }) =
   }
 
   // Si no está autenticado, redirigir al login
-  if (!user) {
+  if (!usuario) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Verificar si el usuario es administrador
-  // TODO: Implementar verificación de rol en el backend
-  const isAdmin = user.rol === 'admin' || user.rol === 'mantenedor';
+  const userIsAdmin = isAdmin();
 
-  if (!isAdmin) {
+  if (!userIsAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8 text-center">
@@ -64,3 +70,4 @@ const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({ children }) =
 };
 
 export default ProtectedAdminRoute;
+

@@ -29,6 +29,10 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import AdminUsersPage from './pages/admin/AdminUsersPage'
 import AdminDiagnosticsPage from './pages/admin/AdminDiagnosticsPage'
+import AdminPaymentsPage from './pages/admin/AdminPaymentsPage'
+import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage'
+import AdminSecurityPage from './pages/admin/AdminSecurityPage'
+import AdminNotificationsPage from './pages/admin/AdminNotificationsPage'
 import AdminSettingsPage from './pages/admin/AdminSettingsPage'
 
 // Estilos
@@ -64,38 +68,22 @@ function App() {
                 <Route path="perfil" element={<PerfilPage />} />
               </Route>
 
-              {/* Admin Routes */}
+              {/* Rutas protegidas para administradores */}
               <Route path="/admin" element={
                 <ProtectedAdminRoute>
-                  <AdminLayout>
-                    <AdminDashboardPage />
-                  </AdminLayout>
+                  <AdminLayout />
                 </ProtectedAdminRoute>
-              } />
-              
-              <Route path="/admin/users" element={
-                <ProtectedAdminRoute>
-                  <AdminLayout>
-                    <AdminUsersPage />
-                  </AdminLayout>
-                </ProtectedAdminRoute>
-              } />
-              
-              <Route path="/admin/diagnostics" element={
-                <ProtectedAdminRoute>
-                  <AdminLayout>
-                    <AdminDiagnosticsPage />
-                  </AdminLayout>
-                </ProtectedAdminRoute>
-              } />
-              
-              <Route path="/admin/settings" element={
-                <ProtectedAdminRoute>
-                  <AdminLayout>
-                    <AdminSettingsPage />
-                  </AdminLayout>
-                </ProtectedAdminRoute>
-              } />
+              }>
+                <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="dashboard" element={<AdminDashboardPage />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="diagnostics" element={<AdminDiagnosticsPage />} />
+                <Route path="payments" element={<AdminPaymentsPage />} />
+                <Route path="analytics" element={<AdminAnalyticsPage />} />
+                <Route path="security" element={<AdminSecurityPage />} />
+                <Route path="notifications" element={<AdminNotificationsPage />} />
+                <Route path="settings" element={<AdminSettingsPage />} />
+              </Route>
               
               {/* Ruta 404 */}
               <Route path="*" element={<NotFoundPage />} />

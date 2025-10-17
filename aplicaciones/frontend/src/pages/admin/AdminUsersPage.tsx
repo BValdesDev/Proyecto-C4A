@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { apiClient } from '@/utilidades/apiClient';
 import { 
   Search, 
   Filter, 
@@ -16,52 +17,42 @@ import {
 
 interface User {
   id: string;
-  name: string;
+  nombre: string;
   email: string;
-  company: string;
-  subscription: 'gratuito' | 'pro' | 'empresarial';
-  status: 'activo' | 'inactivo' | 'suspendido';
-  lastLogin: string;
-  registeredAt: string;
+  empresa: string;
+  suscripcion: string;
+  estado: 'activo' | 'inactivo' | 'suspendido';
+  ultimoLogin: string | null;
+  fechaRegistro: string;
+  activo: boolean;
 }
 
 const AdminUsersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // TODO: Conectar con API real
-  const users: User[] = [
-    {
-      id: '1',
-      name: 'Juan Pérez',
-      email: 'juan@empresaabc.cl',
-      company: 'Empresa ABC',
-      subscription: 'pro',
-      status: 'activo',
-      lastLogin: '2025-10-14T10:30:00Z',
-      registeredAt: '2025-09-15T08:00:00Z',
-    },
-    {
-      id: '2',
-      name: 'María González',
-      email: 'maria@techcorp.cl',
-      company: 'TechCorp Chile',
-      subscription: 'empresarial',
-      status: 'activo',
-      lastLogin: '2025-10-14T09:15:00Z',
-      registeredAt: '2025-08-20T14:30:00Z',
-    },
-    {
-      id: '3',
-      name: 'Carlos Silva',
-      email: 'carlos@startup.cl',
-      company: 'Startup Innovadora',
-      subscription: 'gratuito',
-      status: 'inactivo',
-      lastLogin: '2025-10-10T16:45:00Z',
-      registeredAt: '2025-10-01T10:00:00Z',
-    },
-  ];
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get('/api/v1/admin/users');
+        setUsers(response.data.users);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching users:', err);
+        setError(err.response?.data?.detail || 'Error al cargar usuarios');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const variants = {
@@ -77,19 +68,47 @@ const AdminUsersPage: React.FC = () => {
     );
   };
 
+  // Función para exportar usuarios
+  const handleExportUsers = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/admin/users/export', {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `usuarios_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error al exportar usuarios:', error);
+      alert('Error al exportar usuarios. Inténtalo de nuevo.');
+    }
+  };
+
+  // Función para crear nuevo usuario
+  const handleCreateUser = () => {
+    setShowCreateModal(true);
+  };
+
   const getSubscriptionBadge = (subscription: string) => {
     const variants = {
-      gratuito: 'bg-gray-100 text-gray-800',
-      pro: 'bg-blue-100 text-blue-800',
-      empresarial: 'bg-purple-100 text-purple-800',
+      'gratuito': 'bg-gray-100 text-gray-800',
+      'pro': 'bg-blue-100 text-blue-800',
+      'empresarial': 'bg-purple-100 text-purple-800',
     };
     
     return (
-      <Badge className={variants[subscription as keyof typeof variants]}>
+      <Badge className={variants[subscription.toLowerCase() as keyof typeof variants] || 'bg-gray-100 text-gray-800'}>
         {subscription.charAt(0).toUpperCase() + subscription.slice(1)}
       </Badge>
     );
   };
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-CL', {
@@ -102,14 +121,41 @@ const AdminUsersPage: React.FC = () => {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.company.toLowerCase().includes(searchTerm.toLowerCase());
+                         user.empresa.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesFilter = filterStatus === 'all' || user.status === filterStatus;
+    const matchesFilter = filterStatus === 'all' || user.estado === filterStatus;
     
     return matchesSearch && matchesFilter;
   });
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+          <p className="text-gray-600 mt-2">Cargando usuarios...</p>
+        </div>
+        <div className="animate-pulse space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-16 bg-gray-200 rounded"></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+          <p className="text-red-600 mt-2">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -123,11 +169,11 @@ const AdminUsersPage: React.FC = () => {
         </div>
         
         <div className="flex space-x-3">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportUsers}>
             <Download className="h-4 w-4 mr-2" />
             Exportar
           </Button>
-          <Button>
+          <Button onClick={handleCreateUser}>
             <UserPlus className="h-4 w-4 mr-2" />
             Nuevo Usuario
           </Button>
@@ -193,22 +239,22 @@ const AdminUsersPage: React.FC = () => {
                   <tr key={user.id} className="border-b hover:bg-gray-50">
                     <td className="py-4 px-4">
                       <div>
-                        <div className="font-medium text-gray-900">{user.name}</div>
+                        <div className="font-medium text-gray-900">{user.nombre}</div>
                         <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-gray-900">{user.company}</td>
+                    <td className="py-4 px-4 text-gray-900">{user.empresa}</td>
                     <td className="py-4 px-4">
-                      {getSubscriptionBadge(user.subscription)}
+                      {getSubscriptionBadge(user.suscripcion)}
                     </td>
                     <td className="py-4 px-4">
-                      {getStatusBadge(user.status)}
+                      {getStatusBadge(user.estado)}
                     </td>
                     <td className="py-4 px-4 text-sm text-gray-600">
-                      {formatDate(user.lastLogin)}
+                      {user.ultimoLogin ? formatDate(user.ultimoLogin) : 'Nunca'}
                     </td>
                     <td className="py-4 px-4 text-sm text-gray-600">
-                      {formatDate(user.registeredAt)}
+                      {formatDate(user.fechaRegistro)}
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-2">
@@ -236,8 +282,62 @@ const AdminUsersPage: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal para crear usuario */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Crear Nuevo Usuario</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre completo
+                </label>
+                <Input placeholder="Ej: Juan Pérez" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <Input type="email" placeholder="juan@empresa.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Empresa
+                </label>
+                <Input placeholder="Nombre de la empresa" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rol
+                </label>
+                <select className="w-full p-2 border border-gray-300 rounded-md">
+                  <option value="evaluador">Evaluador</option>
+                  <option value="admin_empresa">Admin Empresa</option>
+                  <option value="admin_sistema">Admin Sistema</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCreateModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={() => {
+                alert('Usuario creado exitosamente (simulado)');
+                setShowCreateModal(false);
+              }}>
+                Crear Usuario
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default AdminUsersPage;
+

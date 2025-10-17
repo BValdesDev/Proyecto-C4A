@@ -25,6 +25,10 @@ class ConfiguracionSeguridad(BaseSettings):
     entorno: str = "desarrollo"
     debug: bool = True
     
+    # Configuración de email para notificaciones
+    email_user: str = "c4a.notifications@gmail.com"
+    email_password: str = "c4a_notifications_2024"
+    
     # Base de datos
     url_base_datos: str = "postgresql+asyncpg://c4a_user:c4a_password@localhost:5432/c4a_saas"
     ssl_requerido: bool = False
