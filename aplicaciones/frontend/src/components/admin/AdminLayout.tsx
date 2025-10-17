@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   LayoutDashboard, 
   Users, 
@@ -14,13 +15,10 @@ import {
   X
 } from 'lucide-react';
 
-interface AdminLayoutProps {
-  children: React.ReactNode;
-}
-
-const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
+const AdminLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { usuario, logout } = useAuth();
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -76,7 +74,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             })}
           </nav>
           <div className="border-t px-4 py-4">
-            <button className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-md">
+            <button 
+              onClick={logout}
+              className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-md"
+            >
               <LogOut className="h-5 w-5 mr-3" />
               Cerrar Sesión
             </button>
@@ -110,7 +111,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             })}
           </nav>
           <div className="border-t px-4 py-4">
-            <button className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-md">
+            <button 
+              onClick={logout}
+              className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-md"
+            >
               <LogOut className="h-5 w-5 mr-3" />
               Cerrar Sesión
             </button>
@@ -133,10 +137,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-500">
-                Bienvenido, <span className="font-medium text-gray-900">Administrador</span>
+                Bienvenido, <span className="font-medium text-gray-900">{usuario?.nombres || 'Administrador'}</span>
               </div>
               <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-white">A</span>
+                <span className="text-sm font-medium text-white">
+                  {usuario?.nombres?.charAt(0)?.toUpperCase() || 'A'}
+                </span>
               </div>
             </div>
           </div>
@@ -144,7 +150,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
         {/* Page content */}
         <main className="p-4 sm:p-6 lg:p-8">
-          {children}
+          <Outlet />
         </main>
       </div>
     </div>
@@ -152,3 +158,4 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 };
 
 export default AdminLayout;
+

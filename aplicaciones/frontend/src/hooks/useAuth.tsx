@@ -41,6 +41,7 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   isTokenExpired: boolean
+  isAdmin: () => boolean
 }
 
 // Contexto
@@ -166,8 +167,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       toast.success(`¡Bienvenido, ${usuarioData.nombres}!`)
       
-      // Redirigir al dashboard
-      navigate('/app/dashboard')
+      // Redirigir según el rol del usuario
+      if (usuarioData.rol?.nombre === 'admin_sistema' || usuarioData.rol?.nombre === 'admin_empresa') {
+        navigate('/admin/dashboard')
+      } else {
+        navigate('/app/dashboard')
+      }
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.response?.data?.mensaje || 'Error al iniciar sesión'
       setError(errorMessage)
@@ -229,6 +234,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }
 
+  const isAdmin = (): boolean => {
+    const isAdminUser = usuario?.rol?.nombre === 'admin_sistema' || usuario?.rol?.nombre === 'admin_empresa'
+    console.log('🔍 Debug isAdmin:', {
+      usuario: usuario,
+      rol: usuario?.rol?.nombre,
+      isAdminUser
+    })
+    return isAdminUser
+  }
+
   const value: AuthContextType = {
     usuario,
     token,
@@ -238,7 +253,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshAuthToken,
     loading,
     error,
-    isTokenExpired
+    isTokenExpired,
+    isAdmin
   }
 
   return (
