@@ -302,7 +302,13 @@ async def get_diagnostics(
     """
     require_admin_role(current_user)
     
-    query = db.query(Evaluacion)
+    # Cargar relaciones necesarias
+    from sqlalchemy.orm import joinedload
+    query = db.query(Evaluacion).options(
+        joinedload(Evaluacion.organizacion),
+        joinedload(Evaluacion.creado_por_usuario),
+        joinedload(Evaluacion.framework)
+    )
     
     # Aplicar filtros
     if search:
@@ -327,15 +333,15 @@ async def get_diagnostics(
         "diagnostics": [
             {
                 "id": str(diagnostic.id),
-                "companyName": diagnostic.organizacion.nombre if diagnostic.organizacion else None,
-                "userName": diagnostic.creado_por_usuario.nombre_completo if diagnostic.creado_por_usuario else None,
-                "framework": diagnostic.framework,
-                "status": diagnostic.estado,
-                "score": diagnostic.puntaje_final or 0,
-                "maxScore": diagnostic.puntaje_maximo or 100,
-                "progress": diagnostic.progreso or 0,
-                "createdAt": diagnostic.fecha_creacion.isoformat(),
-                "completedAt": diagnostic.fecha_completado.isoformat() if diagnostic.fecha_completado else None
+                "companyName": diagnostic.organizacion.nombre if diagnostic.organizacion else "Sin organización",
+                "userName": diagnostic.creado_por_usuario.nombre_completo if diagnostic.creado_por_usuario else "Usuario desconocido",
+                "framework": diagnostic.framework.nombre if diagnostic.framework else "Sin framework",
+                "status": diagnostic.estado.value if diagnostic.estado else "sin_estado",
+                "score": float(diagnostic.puntuacion_global) if diagnostic.puntuacion_global else 0,
+                "maxScore": 100,
+                "progress": diagnostic.porcentaje_completado,
+                "createdAt": diagnostic.fecha_creacion.isoformat() if diagnostic.fecha_creacion else None,
+                "completedAt": diagnostic.fecha_completada.isoformat() if diagnostic.fecha_completada else None
             }
             for diagnostic in diagnostics
         ],
@@ -714,16 +720,38 @@ async def get_diagnostic_stats(
     """
     require_admin_role(current_user)
     
-    # Por ahora retornar datos vacíos ya que no hay diagnósticos creados
-    frameworks = ["NIST", "ISO 27001", "CIS Controls", "COBIT"]
+    # Obtener diagnósticos reales agrupados por framework
+    from sqlalchemy.orm import joinedload
+    from sqlalchemy import func
+    from app.modelos.framework import Framework
+    
+    # Obtener todos los frameworks disponibles
+    frameworks_query = db.query(Framework).all()
+    frameworks = [f.nombre for f in frameworks_query] if frameworks_query else ["NIST", "ISO 27001", "CIS Controls", "COBIT"]
+    
     stats = []
     
-    for framework in frameworks:
+    for framework_name in frameworks:
+        # Contar diagnósticos por estado para este framework
+        total = db.query(Evaluacion).filter(
+            Evaluacion.framework.has(Framework.nombre == framework_name)
+        ).count()
+        
+        completed = db.query(Evaluacion).filter(
+            Evaluacion.framework.has(Framework.nombre == framework_name),
+            Evaluacion.estado == EstadoEvaluacion.COMPLETADA
+        ).count()
+        
+        in_progress = db.query(Evaluacion).filter(
+            Evaluacion.framework.has(Framework.nombre == framework_name),
+            Evaluacion.estado == EstadoEvaluacion.EN_PROGRESO
+        ).count()
+        
         stats.append({
-            "framework": framework,
-            "completed": 0,
-            "inProgress": 0,
-            "total": 0
+            "framework": framework_name,
+            "completed": completed,
+            "inProgress": in_progress,
+            "total": total
         })
     
     return {"diagnosticStats": stats}

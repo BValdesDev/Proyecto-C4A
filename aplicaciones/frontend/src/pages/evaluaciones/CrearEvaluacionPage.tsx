@@ -69,9 +69,8 @@ const CrearEvaluacionPage: React.FC = () => {
       })
       
       toast.success('Evaluación creada exitosamente')
-      navigate(`/evaluaciones/${response.id}`)
+      navigate(`/app/evaluaciones/${response.id}`)
     } catch (error) {
-      console.error('Error creando evaluación:', error)
       toast.error('Error al crear la evaluación')
     } finally {
       setCreating(false)
@@ -303,19 +302,4 @@ const CrearEvaluacionPage: React.FC = () => {
 }
 
 export default CrearEvaluacionPage
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

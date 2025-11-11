@@ -9,6 +9,7 @@ from .usuario import Usuario, EstadoCuenta
 from .rol import Rol, TipoRol
 from .framework import Framework
 from .pregunta import Pregunta
+from .cuestionario import Cuestionario, CuestionarioPregunta, NivelCuestionario, TipoSeccion
 from .evaluacion import Evaluacion, EstadoEvaluacion
 from .respuesta import Respuesta
 from .sesion import Sesion
@@ -31,6 +32,10 @@ __all__ = [
     "TipoRol",
     "Framework",
     "Pregunta",
+    "Cuestionario",
+    "CuestionarioPregunta",
+    "NivelCuestionario",
+    "TipoSeccion",
     "Evaluacion",
     "EstadoEvaluacion",
     "Respuesta",

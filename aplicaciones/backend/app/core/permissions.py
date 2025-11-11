@@ -58,32 +58,35 @@ class PermissionService:
     """Servicio de permisos por niveles de suscripción"""
     
     def __init__(self):
+        # Definir permisos base primero
+        permisos_gratuito = [
+            # Evaluaciones básicas
+            Permiso.CREAR_EVALUACION,
+            Permiso.VER_EVALUACIONES,
+            Permiso.EDITAR_EVALUACION,
+            
+            # Reportes básicos
+            Permiso.GENERAR_REPORTE_BASICO,
+            
+            # Suscripción
+            Permiso.VER_SUSCRIPCION,
+            Permiso.ACTUALIZAR_SUSCRIPCION,
+            
+            # Organización básica
+            Permiso.VER_ORGANIZACION,
+            
+            # Usuario
+            Permiso.VER_PERFIL,
+            Permiso.EDITAR_PERFIL,
+            Permiso.CAMBIAR_CONTRASEÑA,
+        ]
+        
         self.permissions_by_level = {
-            NivelSuscripcion.GRATUITO: [
-                # Evaluaciones básicas
-                Permiso.CREAR_EVALUACION,
-                Permiso.VER_EVALUACIONES,
-                Permiso.EDITAR_EVALUACION,
-                
-                # Reportes básicos
-                Permiso.GENERAR_REPORTE_BASICO,
-                
-                # Suscripción
-                Permiso.VER_SUSCRIPCION,
-                Permiso.ACTUALIZAR_SUSCRIPCION,
-                
-                # Organización básica
-                Permiso.VER_ORGANIZACION,
-                
-                # Usuario
-                Permiso.VER_PERFIL,
-                Permiso.EDITAR_PERFIL,
-                Permiso.CAMBIAR_CONTRASEÑA,
-            ],
+            NivelSuscripcion.GRATUITO: permisos_gratuito,
             
             NivelSuscripcion.PRO: [
                 # Todas las de gratuito
-                *self.permissions_by_level.get(NivelSuscripcion.GRATUITO, []),
+                *permisos_gratuito,
                 
                 # Evaluaciones avanzadas
                 Permiso.ELIMINAR_EVALUACION,
@@ -106,11 +109,14 @@ class PermissionService:
                 
                 # Usuario avanzado
                 Permiso.CONFIGURAR_MFA,
-            ],
-            
-            NivelSuscripcion.EMPRESARIAL: [
+            ]
+        }
+        
+        # Agregar nivel empresarial después
+        permisos_pro = self.permissions_by_level[NivelSuscripcion.PRO]
+        self.permissions_by_level[NivelSuscripcion.EMPRESARIAL] = [
                 # Todas las de pro
-                *self.permissions_by_level.get(NivelSuscripcion.PRO, []),
+                *permisos_pro,
                 
                 # Exportación de datos
                 Permiso.EXPORTAR_DATOS,
@@ -120,7 +126,6 @@ class PermissionService:
                 Permiso.ADMIN_ORGANIZACIONES,
                 Permiso.VER_LOGS_AUDITORIA,
             ]
-        }
         
         # Permisos especiales para administradores del sistema
         self.admin_permissions = [
@@ -298,18 +303,70 @@ def require_permission(permiso: Permiso):
         return wrapper
     return decorator
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def verificar_permisos(usuario: Usuario, permisos_requeridos: List[str], raise_exception: bool = True) -> bool:
+    """
+    Verificar si el usuario tiene los permisos requeridos.
+    
+    Args:
+        usuario: Usuario a verificar
+        permisos_requeridos: Lista de permisos en formato string (ej: ["cuestionarios:admin"])
+        raise_exception: Si True, lanza excepción si no tiene permisos
+    
+    Returns:
+        bool: True si tiene permisos, False si no
+    
+    Raises:
+        HTTPException: Si raise_exception=True y no tiene permisos
+    """
+    from fastapi import HTTPException
+    
+    if not usuario or not usuario.rol:
+        if raise_exception:
+            raise HTTPException(status_code=401, detail="Usuario no autenticado")
+        return False
+    
+    # Admin sistema tiene todos los permisos
+    if usuario.rol.nombre == 'admin_sistema':
+        return True
+    
+    # Admin empresa tiene permisos de administración
+    if usuario.rol.nombre == 'admin_empresa':
+        permisos_admin = [
+            "cuestionarios:admin",
+            "evaluaciones:admin",
+            "organizaciones:admin",
+            "usuarios:admin",
+            "reportes:admin"
+        ]
+        tiene_permiso = any(perm in permisos_admin for perm in permisos_requeridos)
+        if not tiene_permiso and raise_exception:
+            raise HTTPException(status_code=403, detail="Permisos insuficientes")
+        return tiene_permiso
+    
+    # Verificar permisos específicos del rol
+    permisos_usuario = usuario.rol.permisos or []
+    
+    # Verificar si tiene alguno de los permisos requeridos
+    tiene_permiso = False
+    for perm_req in permisos_requeridos:
+        # Soporte para wildcard "*:*"
+        if "*:*" in permisos_usuario:
+            tiene_permiso = True
+            break
+        
+        # Verificar permiso exacto
+        if perm_req in permisos_usuario:
+            tiene_permiso = True
+            break
+        
+        # Verificar permiso con wildcard (ej: "evaluaciones:*" para "evaluaciones:admin")
+        recurso = perm_req.split(":")[0] if ":" in perm_req else perm_req
+        if f"{recurso}:*" in permisos_usuario:
+            tiene_permiso = True
+            break
+    
+    if not tiene_permiso and raise_exception:
+        raise HTTPException(status_code=403, detail="No tiene permisos para realizar esta acción")
+    
+    return tiene_permiso
 

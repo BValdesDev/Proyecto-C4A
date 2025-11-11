@@ -167,11 +167,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       toast.success(`¡Bienvenido, ${usuarioData.nombres}!`)
       
-      // Redirigir según el rol del usuario
+      // Redirigir según el nivel de suscripción del usuario
+      const nivelSuscripcion = usuarioData.organizacion?.nivel_suscripcion
+      
       if (usuarioData.rol?.nombre === 'admin_sistema' || usuarioData.rol?.nombre === 'admin_empresa') {
         navigate('/admin/dashboard')
       } else {
-        navigate('/app/dashboard')
+        // Redirigir según el nivel de suscripción
+        switch (nivelSuscripcion) {
+          case 'gratuito':
+            navigate('/app/plan-gratuito')
+            break
+          case 'pro':
+            navigate('/app/plan-pro')
+            break
+          case 'empresarial':
+            navigate('/app/plan-empresarial')
+            break
+          default:
+            navigate('/app/dashboard')
+        }
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.response?.data?.mensaje || 'Error al iniciar sesión'
@@ -203,7 +218,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true
     } catch (err) {
       // Refresh token inválido o expirado
-      console.error('Error renovando token:', err)
       return false
     }
   }
@@ -215,7 +229,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await apiClient.post('/api/v1/auth/cerrar-sesion')
       }
     } catch (err) {
-      console.error('Error cerrando sesión en servidor:', err)
+        console.error('Error cerrando sesión en servidor:', err)
     } finally {
       // Limpiar estado local siempre
       localStorage.removeItem('c4a_token')
@@ -236,11 +250,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isAdmin = (): boolean => {
     const isAdminUser = usuario?.rol?.nombre === 'admin_sistema' || usuario?.rol?.nombre === 'admin_empresa'
-    console.log('🔍 Debug isAdmin:', {
-      usuario: usuario,
-      rol: usuario?.rol?.nombre,
-      isAdminUser
-    })
     return isAdminUser
   }
 

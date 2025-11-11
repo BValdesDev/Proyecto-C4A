@@ -10,7 +10,6 @@ from sqlalchemy.orm import relationship
 
 from .base import ModeloConUUID
 
-
 class LogAuditoria(ModeloConUUID):
     """Modelo de log de auditoría"""
     __tablename__ = "logs_auditoria"

@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--headless=false",
+        "--isolated=false",
+        "--channel=stable"
+      ]
+    },
+    "chrome-devtools-testing": {
+      "command": "npx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--headless=true",
+        "--isolated=true",
+        "--channel=stable",
+        "--viewport=1920x1080"
+      ]
+    },
+    "chrome-devtools-remote": {
+      "command": "npx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--browser-url=http://127.0.0.1:9222"
+      ]
+    }
+  }
+}
+
+
+
+

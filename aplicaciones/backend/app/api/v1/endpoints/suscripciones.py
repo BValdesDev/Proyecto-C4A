@@ -24,7 +24,6 @@ from ..dependencias import (
 
 router = APIRouter()
 
-
 # Modelos Pydantic
 class NivelSuscripcionResponse(BaseModel):
     nivel: str
@@ -33,7 +32,6 @@ class NivelSuscripcionResponse(BaseModel):
     precio_anual_clp: int
     caracteristicas: List[str]
     limites: Dict[str, Any]
-
 
 class SuscripcionResponse(BaseModel):
     id: str
@@ -47,11 +45,9 @@ class SuscripcionResponse(BaseModel):
     uso_usuarios: int
     fecha_creacion: datetime
 
-
 class CambioSuscripcionRequest(BaseModel):
     nuevo_nivel: NivelSuscripcion
     metodo_pago_id: Optional[str] = None
-
 
 # Endpoints
 @router.get("/niveles", response_model=List[NivelSuscripcionResponse])
@@ -85,7 +81,6 @@ async def obtener_niveles_suscripcion():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.get("/actual", response_model=SuscripcionResponse)
 async def obtener_suscripcion_actual(
@@ -134,7 +129,6 @@ async def obtener_suscripcion_actual(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.post("/suscribirse")
 async def suscribirse_nivel(
@@ -241,7 +235,6 @@ async def suscribirse_nivel(
             detail="Error interno del servidor"
         )
 
-
 @router.post("/cancelar")
 async def cancelar_suscripcion(
     organizacion: Organizacion = Depends(obtener_organizacion_usuario),
@@ -301,7 +294,6 @@ async def cancelar_suscripcion(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/uso")
 async def obtener_uso_suscripcion(
     organizacion: Organizacion = Depends(obtener_organizacion_usuario),
@@ -350,7 +342,6 @@ async def obtener_uso_suscripcion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.get("/facturas")
 async def obtener_facturas(

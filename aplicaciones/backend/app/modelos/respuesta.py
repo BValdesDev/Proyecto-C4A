@@ -10,7 +10,6 @@ from sqlalchemy.orm import relationship
 
 from .base import ModeloConUUID
 
-
 class Respuesta(ModeloConUUID):
     """Modelo de respuesta a pregunta de evaluación"""
     __tablename__ = "respuestas"

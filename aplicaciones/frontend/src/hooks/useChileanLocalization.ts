@@ -37,18 +37,3 @@ export function useChileanLocalization() {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

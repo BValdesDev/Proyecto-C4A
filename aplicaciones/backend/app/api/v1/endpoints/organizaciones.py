@@ -23,7 +23,6 @@ from ..dependencias import (
 
 router = APIRouter()
 
-
 # Modelos Pydantic
 class OrganizacionCreateRequest(BaseModel):
     nombre: str
@@ -36,7 +35,6 @@ class OrganizacionCreateRequest(BaseModel):
     sitio_web: Optional[str] = None
     telefono: Optional[str] = None
 
-
 class OrganizacionUpdateRequest(BaseModel):
     nombre: Optional[str] = None
     rut: Optional[str] = None
@@ -48,7 +46,6 @@ class OrganizacionUpdateRequest(BaseModel):
     sitio_web: Optional[str] = None
     telefono: Optional[str] = None
     email_facturacion: Optional[str] = None
-
 
 class OrganizacionResponse(BaseModel):
     id: str
@@ -70,7 +67,6 @@ class OrganizacionResponse(BaseModel):
     email_facturacion: Optional[str]
     fecha_creacion: datetime
 
-
 class UsoOrganizacionResponse(BaseModel):
     evaluaciones_usadas: int
     evaluaciones_limite: int
@@ -78,7 +74,6 @@ class UsoOrganizacionResponse(BaseModel):
     usuarios_limite: int
     porcentaje_uso_evaluaciones: float
     porcentaje_uso_usuarios: float
-
 
 # Endpoints
 @router.post("/", response_model=OrganizacionResponse)
@@ -174,7 +169,6 @@ async def crear_organizacion(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/{org_id}", response_model=OrganizacionResponse)
 async def obtener_organizacion(
     org_id: str,
@@ -210,7 +204,6 @@ async def obtener_organizacion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.put("/{org_id}", response_model=OrganizacionResponse)
 async def actualizar_organizacion(
@@ -298,7 +291,6 @@ async def actualizar_organizacion(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/{org_id}/usuarios")
 async def listar_usuarios_organizacion(
     org_id: str,
@@ -343,7 +335,6 @@ async def listar_usuarios_organizacion(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/{org_id}/uso", response_model=UsoOrganizacionResponse)
 async def obtener_uso_organizacion(
     org_id: str,
@@ -369,7 +360,6 @@ async def obtener_uso_organizacion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.get("/{org_id}/estadisticas")
 async def obtener_estadisticas_organizacion(

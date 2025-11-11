@@ -93,8 +93,7 @@ export const useEvaluacion = ({ evaluacionId, nivel }: UseEvaluacionProps): UseE
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error cargando evaluación')
-      console.error('Error cargando evaluación:', err)
-    } finally {
+      } finally {
       setLoading(false)
     }
   }, [evaluacionId, nivel])
@@ -145,8 +144,7 @@ export const useEvaluacion = ({ evaluacionId, nivel }: UseEvaluacionProps): UseE
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error finalizando evaluación')
-      console.error('Error finalizando evaluación:', err)
-    } finally {
+      } finally {
       setLoading(false)
     }
   }, [evaluacionId, autoGuardar])

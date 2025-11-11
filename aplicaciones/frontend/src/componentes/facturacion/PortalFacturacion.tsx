@@ -122,7 +122,6 @@ export const PortalFacturacion: React.FC<PropiedadesPortalFacturacion> = ({
       setMetodosPago(metodosResponse.data.metodos)
 
     } catch (error) {
-      console.error('Error cargando datos de facturación:', error)
       toast.error('Error al cargar los datos de facturación')
     } finally {
       setCargando(false)

@@ -73,7 +73,6 @@ const AdminDashboardPage: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al exportar usuarios:', error);
       alert('Error al exportar usuarios. Inténtalo de nuevo.');
     }
   };
@@ -94,7 +93,7 @@ const AdminDashboardPage: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al exportar diagnósticos:', error);
+      console.error('Error al exportar diagnósticos:', Error);
       alert('Error al exportar diagnósticos. Inténtalo de nuevo.');
     }
   };
@@ -104,7 +103,7 @@ const AdminDashboardPage: React.FC = () => {
       await apiClient.post('/api/v1/admin/payments/sync');
       alert('Sincronización de pagos completada exitosamente');
     } catch (error) {
-      console.error('Error al sincronizar pagos:', error);
+      console.error('Error al sincronizar pagos:', Error);
       alert('Error al sincronizar pagos. Inténtalo de nuevo.');
     }
   };
@@ -125,7 +124,7 @@ const AdminDashboardPage: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al exportar pagos:', error);
+      console.error('Error al exportar pagos:', Error);
       alert('Error al exportar pagos. Inténtalo de nuevo.');
     }
   };
@@ -146,7 +145,7 @@ const AdminDashboardPage: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al exportar analytics:', error);
+      console.error('Error al exportar analytics:', Error);
       alert('Error al exportar analytics. Inténtalo de nuevo.');
     }
   };

@@ -24,7 +24,6 @@ export const DashboardPage: React.FC = () => {
   const [estadisticas, setEstadisticas] = useState<EstadisticasDashboard | null>(null)
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([])
   const [loading, setLoading] = useState(true)
-  const [creatingEvaluation, setCreatingEvaluation] = useState(false)
 
   useEffect(() => {
     if (usuario) {
@@ -47,7 +46,7 @@ export const DashboardPage: React.FC = () => {
       setEvaluaciones(evaluacionesResponse.evaluaciones || [])
       
     } catch (error) {
-      console.error('Error cargando datos del dashboard:', error)
+          console.error('Error cargando datos del dashboard:', error)
       // En caso de error, usar datos por defecto
       setEstadisticas({
         total_evaluaciones: 0,
@@ -92,25 +91,28 @@ export const DashboardPage: React.FC = () => {
   // Funciones para acciones rápidas
   const handleCrearNuevaEvaluacion = async () => {
     try {
-      setCreatingEvaluation(true)
+      console.log('Obteniendo cuestionario principal...')
       
-      // Crear evaluación directamente usando el endpoint del dashboard
-      const nombreEvaluacion = `Evaluación de Ciberseguridad - ${new Date().toLocaleDateString('es-CL')}`
+      // Obtener el cuestionario principal según el nivel de suscripción
+      const cuestionario = await api.get('/api/v1/cuestionarios/principal')
       
-      const response = await api.post('/api/v1/dashboard/evaluaciones', {
-        nombre: nombreEvaluacion
+      console.log('Cuestionario obtenido:', {
+        id: cuestionario.id,
+        nombre: cuestionario.nombre,
+        nivel: cuestionario.nivel
       })
       
-      toast.success('¡Evaluación creada exitosamente!')
+      // Navegar directamente a las preguntas del cuestionario
+      const ruta = `/app/diagnosticos/${cuestionario.id}/responder`
+      console.log('Navegando a:', ruta)
+      navigate(ruta)
       
-      // Navegar a la página de la evaluación para comenzar a responder
-      navigate(`/app/evaluaciones/${response.id}`)
-      
-    } catch (error) {
-      console.error('Error creando evaluación:', error)
-      toast.error('Error al crear la evaluación. Inténtalo de nuevo.')
-    } finally {
-      setCreatingEvaluation(false)
+    } catch (error: any) {
+      console.error('Error al obtener cuestionario principal:', error)
+      console.error('Error response:', error.response)
+      console.error('Error message:', error.message)
+      console.error('Error details:', error.response?.data)
+      toast.error('Error al cargar el cuestionario. Inténtalo de nuevo.')
     }
   }
 
@@ -127,6 +129,12 @@ export const DashboardPage: React.FC = () => {
   }
 
   const getNivelPreguntas = () => {
+    const limites = usuario?.organizacion?.limites
+    if (limites) {
+      return `${limites.preguntas_evaluacion} preguntas (${limites.tiempo_estimado})`
+    }
+    
+    // Fallback si no hay límites
     const nivel = usuario?.organizacion?.nivel_suscripcion || 'gratuito'
     switch (nivel) {
       case 'gratuito': return '10 preguntas (5-7 minutos)'
@@ -264,9 +272,8 @@ export const DashboardPage: React.FC = () => {
                     className="mt-4" 
                     size="sm"
                     onClick={handleCrearNuevaEvaluacion}
-                    disabled={creatingEvaluation}
                   >
-                    {creatingEvaluation ? 'Creando...' : 'Crear Primera Evaluación'}
+                    Crear Primera Evaluación
                   </Button>
                 </div>
               ) : (
@@ -275,7 +282,7 @@ export const DashboardPage: React.FC = () => {
                     <div className="flex-1">
                       <h4 className="font-medium">{evaluacion.nombre}</h4>
                       <p className="text-sm text-muted-foreground">
-                        {evaluacion.framework.nombre_mostrar}
+                        {evaluacion.framework?.nombre_mostrar || evaluacion.framework?.nombre || 'N/A'}
                       </p>
                       <div className="flex items-center space-x-2 mt-2">
                         <Badge className={getEstadoBadgeColor(evaluacion.estado)}>
@@ -292,7 +299,7 @@ export const DashboardPage: React.FC = () => {
                       <div className="text-sm text-muted-foreground">
                         {new Date(evaluacion.fecha_creacion).toLocaleDateString('es-CL')}
                       </div>
-                      {evaluacion.estado === 'en_progreso' && (
+                      {evaluacion.estado === 'en_progreso' && evaluacion.porcentaje_completado && (
                         <div className="text-xs text-c4a-blue-600">
                           {evaluacion.porcentaje_completado.toFixed(0)}% completado
                         </div>
@@ -319,10 +326,9 @@ export const DashboardPage: React.FC = () => {
                 className="w-full justify-start" 
                 variant="outline"
                 onClick={handleCrearNuevaEvaluacion}
-                disabled={creatingEvaluation}
               >
                 <FileText className="w-4 h-4 mr-2" />
-                {creatingEvaluation ? 'Creando...' : 'Crear Nueva Evaluación'}
+                Crear Nueva Evaluación
               </Button>
               <Button 
                 className="w-full justify-start" 

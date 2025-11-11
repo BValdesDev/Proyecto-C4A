@@ -34,6 +34,9 @@ def get_url():
     # Try to get from environment first
     db_url = os.getenv("DATABASE_URL")
     if db_url:
+        # Replace postgresql+asyncpg with postgresql+psycopg2 for Alembic
+        if "postgresql+asyncpg" in db_url:
+            db_url = db_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
         return db_url
     
     # Fall back to config file

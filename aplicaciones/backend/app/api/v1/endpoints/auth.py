@@ -24,7 +24,6 @@ from ..dependencias import obtener_usuario_actual_dependencia
 router = APIRouter()
 security_scheme = HTTPBearer()
 
-
 # Modelos Pydantic
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -39,7 +38,6 @@ class RegistroRequest(BaseModel):
     sector: Optional[str] = None
     tamaño: Optional[str] = None
 
-
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -47,10 +45,8 @@ class LoginResponse(BaseModel):
     refresh_token: str
     usuario: dict
 
-
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
-
 
 class UsuarioResponse(BaseModel):
     id: str
@@ -64,11 +60,9 @@ class UsuarioResponse(BaseModel):
     estado_cuenta: str
     fecha_ultimo_acceso: Optional[datetime]
 
-
 class CambioPasswordRequest(BaseModel):
     password_actual: str
     password_nuevo: str
-
 
 # Endpoints
 @router.post("/iniciar-sesion", response_model=LoginResponse)
@@ -85,23 +79,24 @@ async def iniciar_sesion(
     
     try:
         # Verificar rate limiting
-        if not seguridad._verificar_rate_limit(client_ip):
-            # Registrar intento fallido
-            seguridad._registrar_intento_fallido(client_ip)
-            
-            # Log de intento bloqueado
-            LogAuditoria.crear_log(
-                tipo_evento="autenticacion",
-                accion="login_bloqueado_rate_limit",
-                exitoso=False,
-                direccion_ip=client_ip,
-                agente_usuario=user_agent
-            )
-            
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Demasiados intentos fallidos. Intenta nuevamente en 5 minutos."
-            )
+        if not config.debug:
+            if not seguridad._verificar_rate_limit(client_ip):
+                # Registrar intento fallido
+                seguridad._registrar_intento_fallido(client_ip)
+                
+                # Log de intento bloqueado
+                LogAuditoria.crear_log(
+                    tipo_evento="autenticacion",
+                    accion="login_bloqueado_rate_limit",
+                    exitoso=False,
+                    direccion_ip=client_ip,
+                    agente_usuario=user_agent
+                )
+                
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Demasiados intentos fallidos. Intenta nuevamente en 5 minutos."
+                )
         
         # Buscar usuario con relaciones
         from sqlalchemy.orm import joinedload
@@ -202,6 +197,9 @@ async def iniciar_sesion(
         usuario.fecha_ultimo_acceso = datetime.utcnow()
         db.commit()
         
+        # Restablecer el contador de rate limit para la IP en caso de éxito
+        seguridad.resetear_rate_limit(client_ip)
+        
         # Log de login exitoso
         LogAuditoria.crear_log(
             tipo_evento="autenticacion",
@@ -257,7 +255,6 @@ async def iniciar_sesion(
                 detail=f"Error interno del servidor: {str(e)}"
             )
 
-
 @router.post("/registro")
 async def registrar_usuario(
     request: Request,
@@ -268,8 +265,6 @@ async def registrar_usuario(
     try:
         # Obtener datos del request
         data = await request.json()
-        print(f"Datos de registro recibidos: {data}")
-        
         # Validar datos básicos
         if not data.get("email") or not data.get("password"):
             raise HTTPException(
@@ -366,7 +361,6 @@ async def registrar_usuario(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno del servidor: {str(e)}"
         )
-
 
 @router.post("/renovar-token", response_model=dict)
 async def renovar_token(
@@ -519,7 +513,6 @@ async def renovar_token(
             detail="Error interno del servidor"
         )
 
-
 @router.post("/cerrar-sesion")
 async def cerrar_sesion(
     request: Request,
@@ -573,8 +566,15 @@ async def cerrar_sesion(
         
         if sesion:
             sesion.revocar("Logout manual")
-            # Revocar token en cache
-            seguridad.revocar_token(payload["jti"])
+            
+            # Revocar token en blacklist distribuida (Redis)
+            expiracion = None
+            if "exp" in payload:
+                expiracion = datetime.fromtimestamp(payload["exp"])
+            
+            seguridad.revocar_token(payload["jti"], expiracion, "Logout manual")
+            seguridad.revocar_token_completo(token, expiracion, "Logout manual")
+            
             db.commit()
         
         # Log de logout exitoso
@@ -606,7 +606,6 @@ async def cerrar_sesion(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/mi-perfil")
 async def obtener_mi_perfil(
     usuario: Usuario = Depends(obtener_usuario_actual_dependencia),
@@ -615,6 +614,9 @@ async def obtener_mi_perfil(
     """Obtener perfil del usuario actual"""
     
     try:
+        # Importar servicio de suscripción
+        from app.servicios.suscripcion_service import ServicioSuscripcion
+        
         # Obtener datos actualizados del usuario
         usuario_actual = db.query(Usuario).filter(
             Usuario.id == usuario.id,
@@ -627,6 +629,16 @@ async def obtener_mi_perfil(
                 detail="Usuario no encontrado"
             )
         
+        # Obtener nivel real de suscripción
+        servicio_suscripcion = ServicioSuscripcion(db)
+        nivel_real = servicio_suscripcion.obtener_nivel_suscripcion_activa(str(usuario_actual.organizacion_id))
+        
+        # Sincronizar si es necesario
+        servicio_suscripcion.sincronizar_nivel_organizacion(str(usuario_actual.organizacion_id))
+        
+        # Obtener límites del nivel
+        limites = servicio_suscripcion.obtener_limites_nivel(nivel_real)
+        
         return {
             "id": str(usuario_actual.id),
             "email": usuario_actual.email,
@@ -635,9 +647,10 @@ async def obtener_mi_perfil(
             "organizacion": {
                 "id": str(usuario_actual.organizacion.id),
                 "nombre": usuario_actual.organizacion.nombre,
-                "nivel_suscripcion": usuario_actual.organizacion.nivel_suscripcion.value,
+                "nivel_suscripcion": nivel_real.value,
                 "sector": usuario_actual.organizacion.sector.value if usuario_actual.organizacion.sector else None,
-                "tamaño": usuario_actual.organizacion.tamaño.value if usuario_actual.organizacion.tamaño else None
+                "tamaño": usuario_actual.organizacion.tamaño.value if usuario_actual.organizacion.tamaño else None,
+                "limites": limites
             },
             "rol": {
                 "id": str(usuario_actual.rol.id),
@@ -657,7 +670,6 @@ async def obtener_mi_perfil(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.post("/cambiar-password")
 async def cambiar_password(
@@ -689,6 +701,13 @@ async def cambiar_password(
         
         for sesion in sesiones_activas:
             sesion.revocar("Cambio de contraseña")
+            
+            # Revocar en blacklist distribuida
+            expiracion = sesion.fecha_vencimiento if sesion.fecha_vencimiento else None
+            seguridad.revocar_token(sesion.jti, expiracion, "Cambio de contraseña")
+        
+        # Revocar todos los tokens del usuario en blacklist
+        seguridad.blacklist.revocar_todos_tokens_usuario(str(usuario.id), "Cambio de contraseña")
         
         db.commit()
         

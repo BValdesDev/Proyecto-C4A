@@ -78,8 +78,6 @@ const AdminSecurityPage: React.FC = () => {
       setLogs(logsResponse.data.logs);
       setConfig(configResponse.data);
     } catch (error) {
-      console.error('Error fetching security data:', error);
-      
       // Fallback a datos mock si hay error
       const mockStats: SecurityStats = {
         totalLogins: 142,

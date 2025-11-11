@@ -226,5 +226,3 @@ export {
   MenubarShortcut,
 }
 
-
-

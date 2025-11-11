@@ -53,7 +53,6 @@ async def obtener_usuario_actual_dependencia(
         ).first()
     else:
         # Verificar token JWT real
-        print(f"Verificando token: {token[:50]}...")
         payload = obtener_usuario_actual(token)
         print(f"Payload obtenido: {payload}")
         if not payload:
@@ -67,13 +66,11 @@ async def obtener_usuario_actual_dependencia(
             Usuario.id == payload["id"],
             Usuario.fecha_eliminacion.is_(None)
         ).first()
-        print(f"Usuario encontrado: {usuario.email if usuario else 'None'}")
-    
-    if not usuario:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario no encontrado"
-        )
+        if not usuario:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Usuario no encontrado"
+            )
     
     if not usuario.esta_activo:
         raise HTTPException(
@@ -193,23 +190,40 @@ async def verificar_limite_usuarios(
 
 # Dependencia para obtener usuario opcional (para endpoints públicos)
 async def obtener_usuario_opcional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    request: Request,
     db: Session = Depends(obtener_db)
 ) -> Optional[Usuario]:
     """Obtener usuario opcional (puede ser None)"""
     
-    if not credentials:
+    # Verificar si hay token en el header Authorization
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
         return None
     
+    token = auth_header.split(" ")[1]
+    
     try:
-        payload = obtener_usuario_actual(credentials.credentials)
-        if not payload:
-            return None
-        
-        usuario = db.query(Usuario).filter(
-            Usuario.id == payload["id"],
-            Usuario.fecha_eliminacion.is_(None)
-        ).first()
+        # Para tokens fake, extraer el ID del usuario del token
+        if token.startswith("fake_access_token_"):
+            usuario_id = token.replace("fake_access_token_", "")
+            
+            # Obtener usuario de la base de datos
+            usuario = db.query(Usuario).filter(
+                Usuario.id == usuario_id,
+                Usuario.fecha_eliminacion.is_(None)
+            ).first()
+            
+        else:
+            # Verificar token JWT real
+            payload = obtener_usuario_actual(token)
+            if not payload:
+                return None
+            
+            # Obtener usuario de la base de datos
+            usuario = db.query(Usuario).filter(
+                Usuario.id == payload["id"],
+                Usuario.fecha_eliminacion.is_(None)
+            ).first()
         
         return usuario if usuario and usuario.esta_activo else None
     

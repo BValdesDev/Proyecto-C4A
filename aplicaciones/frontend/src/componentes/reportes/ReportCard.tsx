@@ -149,4 +149,3 @@ export const ReportCard: React.FC<ReportCardProps> = ({
   )
 }
 
-

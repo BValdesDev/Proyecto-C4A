@@ -86,18 +86,3 @@ export function ChileanSelect({
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

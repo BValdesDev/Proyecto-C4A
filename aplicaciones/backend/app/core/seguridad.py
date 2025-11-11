@@ -2,6 +2,7 @@
 """
 Módulo de seguridad para C4A SaaS
 JWT RS256, Argon2id, cifrado AES-256-GCM, protección contra ataques
+Con soporte para gestión de claves y blacklist distribuida en Redis
 """
 
 from datetime import datetime, timedelta
@@ -20,7 +21,8 @@ import time
 import uuid
 
 from .config import config
-
+from .gestion_claves import obtener_gestor_claves
+from .token_blacklist import obtener_blacklist
 
 # Contexto para hash de contraseñas con Argon2id (más seguro)
 pwd_context = CryptContext(
@@ -38,15 +40,20 @@ ALGORITMO_JWT = config.algoritmo_jwt
 TIEMPO_EXPIRACION_ACCESO = config.tiempo_expiracion_acceso
 TIEMPO_EXPIRACION_REFRESCO = config.tiempo_expiracion_refresco
 
-
 class SeguridadC4A:
     """Clase principal para operaciones de seguridad con mejores prácticas"""
     
     def __init__(self):
-        self.clave_publica = config.clave_publica_jwt
-        self.clave_privada = config.clave_privada_jwt
+        # Gestor de claves con soporte para rotación
+        self.gestor_claves = obtener_gestor_claves()
+        self.clave_publica = self.gestor_claves.obtener_clave_publica()
+        self.clave_privada = self.gestor_claves.obtener_clave_privada()
         self.clave_cifrado = self._generar_clave_cifrado()
-        self._cache_tokens_revocados = set()  # Cache para tokens revocados
+        
+        # Blacklist de tokens (Redis distribuido)
+        self.blacklist = obtener_blacklist()
+        
+        # Rate limiting en memoria (mejor usar Redis en producción)
         self._intentos_fallidos = {}  # Rate limiting por IP
         self._max_intentos = 5  # Máximo intentos por IP
         self._tiempo_bloqueo = 300  # 5 minutos de bloqueo
@@ -92,11 +99,18 @@ class SeguridadC4A:
         else:
             self._intentos_fallidos[ip] = (1, ahora)
     
-    def _limpiar_cache_tokens(self):
-        """Limpiar cache de tokens revocados (llamar periódicamente)"""
-        # En producción, esto debería ser manejado por Redis
-        if len(self._cache_tokens_revocados) > 10000:
-            self._cache_tokens_revocados.clear()
+    def resetear_rate_limit(self, ip: str):
+        """Eliminar el conteo de intentos para una IP específica"""
+        if ip in self._intentos_fallidos:
+            del self._intentos_fallidos[ip]
+    
+    def _actualizar_claves(self):
+        """Actualizar claves del gestor (útil después de rotación)"""
+        try:
+            self.clave_publica = self.gestor_claves.obtener_clave_publica()
+            self.clave_privada = self.gestor_claves.obtener_clave_privada()
+        except Exception as e:
+            print(f"Error actualizando claves: {e}")
     
     def verificar_contraseña(self, contraseña_plana: str, hash_contraseña: str) -> bool:
         """Verificar contraseña usando Argon2id"""
@@ -168,19 +182,49 @@ class SeguridadC4A:
             if ip and not self._verificar_rate_limit(ip):
                 return None
             
-            # Verificar si el token está en cache de revocados
-            token_hash = hashlib.sha256(token.encode()).hexdigest()
-            if token_hash in self._cache_tokens_revocados:
+            # Verificar si el token está en la blacklist (CRÍTICO)
+            if self.blacklist.is_token_revoked(token):
+                print(f"Token revocado detectado en blacklist")
                 return None
             
-            # Decodificar token
-            payload = jwt.decode(
-                token, 
-                self.clave_publica, 
-                algorithms=[ALGORITMO_JWT],
-                audience="c4a-frontend",
-                issuer="c4a-saas"
-            )
+            # Intentar decodificar con clave actual
+            try:
+                payload = jwt.decode(
+                    token, 
+                    self.clave_publica, 
+                    algorithms=[ALGORITMO_JWT],
+                    audience="c4a-frontend",
+                    issuer="c4a-saas"
+                )
+            except JWTError as e:
+                # Si falla, intentar con claves anteriores (migración)
+                print(f"Token no válido con clave actual, intentando con claves anteriores: {e}")
+                claves_validas = self.gestor_claves.obtener_claves_validas()
+                
+                for key_id in claves_validas[1:]:  # Saltar la primera (ya intentamos)
+                    try:
+                        pub_key = self.gestor_claves.obtener_clave_publica_por_id(key_id)
+                        if pub_key:
+                            payload = jwt.decode(
+                                token,
+                                pub_key,
+                                algorithms=[ALGORITMO_JWT],
+                                audience="c4a-frontend",
+                                issuer="c4a-saas"
+                            )
+                            print(f"Token válido con clave anterior (ID: {key_id})")
+                            break
+                    except JWTError:
+                        continue
+                else:
+                    # No se encontró clave válida
+                    return None
+            
+            # Verificar JTI en blacklist
+            jti = payload.get("jti")
+            if jti and self.blacklist.is_jti_revoked(jti):
+                print(f"JTI {jti} revocado en blacklist")
+                return None
             
             # Verificar tipo de token
             if payload.get("type") != tipo_esperado:
@@ -208,10 +252,13 @@ class SeguridadC4A:
         except JWTError:
             return None
     
-    def revocar_token(self, jti: str):
-        """Revocar token por JTI"""
-        self._cache_tokens_revocados.add(jti)
-        self._limpiar_cache_tokens()
+    def revocar_token(self, jti: str, expiracion: Optional[datetime] = None, motivo: str = "Logout manual"):
+        """Revocar token por JTI usando blacklist distribuida"""
+        return self.blacklist.revocar_token_por_jti(jti, expiracion, motivo)
+    
+    def revocar_token_completo(self, token: str, expiracion: Optional[datetime] = None, motivo: str = "Logout manual"):
+        """Revocar token completo usando blacklist distribuida"""
+        return self.blacklist.revocar_token(token, expiracion, motivo)
     
     def verificar_autenticacion_segura(self, token: str, ip: str = None) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Verificar autenticación con protecciones adicionales"""
@@ -404,10 +451,8 @@ class SeguridadC4A:
         else:
             return "fuerte"
 
-
 # Instancia global de seguridad
 seguridad = SeguridadC4A()
-
 
 def obtener_usuario_actual(token: str, ip: str = None) -> Optional[Dict[str, Any]]:
     """Obtener usuario actual desde token"""
@@ -421,7 +466,6 @@ def obtener_usuario_actual(token: str, ip: str = None) -> Optional[Dict[str, Any
             "rol": payload.get("rol")
         }
     return None
-
 
 def verificar_permisos_nivel(usuario_nivel: str, nivel_requerido: str) -> bool:
     """Verificar si el usuario tiene el nivel requerido"""

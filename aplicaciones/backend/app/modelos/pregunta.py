@@ -11,7 +11,6 @@ from sqlalchemy.orm import relationship
 from .base import ModeloConUUID
 from ..core.config import NivelSuscripcion
 
-
 class Pregunta(ModeloConUUID):
     """Modelo de pregunta de evaluación"""
     __tablename__ = "preguntas"

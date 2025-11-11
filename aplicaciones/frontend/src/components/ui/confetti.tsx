@@ -137,12 +137,3 @@ export function Confetti({
   )
 }
 
-
-
-
-
-
-
-
-
-

@@ -379,18 +379,3 @@ export const getChileanRegions = (): Record<string, string> => {
   return chileLocalization.getChileanRegions();
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

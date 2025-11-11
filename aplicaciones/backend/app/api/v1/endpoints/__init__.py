@@ -3,7 +3,7 @@
 Endpoints de la API v1
 """
 
-from . import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, admin
+from . import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, admin, dashboard, cuestionarios, pdf_profesional
 
 __all__ = [
     "auth",
@@ -12,5 +12,8 @@ __all__ = [
     "evaluaciones",
     "reportes",
     "suscripciones",
-    "admin"
+    "admin",
+    "dashboard",
+    "cuestionarios",
+    "pdf_profesional"
 ] 

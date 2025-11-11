@@ -278,18 +278,3 @@ def get_chilean_time() -> datetime:
     """Obtener hora actual de Chile"""
     return chile_localization.get_current_chilean_time()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

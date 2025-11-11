@@ -168,7 +168,6 @@ export const CuestionarioNivel: React.FC<PropiedadesCuestionario> = ({
       alCompletar(resultados)
       
     } catch (error) {
-      console.error('Error completando evaluación:', error)
       toast.error('Error al completar la evaluación')
     } finally {
       setGuardando(false)

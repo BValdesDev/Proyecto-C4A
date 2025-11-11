@@ -76,19 +76,34 @@ apiClient.interceptors.response.use(
 // Funciones helper para tipos de requests
 export const api = {
   get: <T = any>(url: string, config?: any) => 
-    apiClient.get<T>(url, config).then(res => res.data),
+    apiClient.get<T>(url, config).then(res => {
+      console.log('API Response:', res.data)
+      return res.data
+    }),
   
   post: <T = any>(url: string, data?: any, config?: any) => 
-    apiClient.post<T>(url, data, config).then(res => res.data),
+    apiClient.post<T>(url, data, config).then(res => {
+      console.log('API Response:', res.data)
+      return res.data
+    }),
   
   put: <T = any>(url: string, data?: any, config?: any) => 
-    apiClient.put<T>(url, data, config).then(res => res.data),
+    apiClient.put<T>(url, data, config).then(res => {
+      console.log('API Response:', res.data)
+      return res.data
+    }),
   
   delete: <T = any>(url: string, config?: any) => 
-    apiClient.delete<T>(url, config).then(res => res.data),
+    apiClient.delete<T>(url, config).then(res => {
+      console.log('API Response:', res.data)
+      return res.data
+    }),
   
   patch: <T = any>(url: string, data?: any, config?: any) => 
-    apiClient.patch<T>(url, data, config).then(res => res.data),
+    apiClient.patch<T>(url, data, config).then(res => {
+      console.log('API Response:', res.data)
+      return res.data
+    }),
 }
 
 export default apiClient

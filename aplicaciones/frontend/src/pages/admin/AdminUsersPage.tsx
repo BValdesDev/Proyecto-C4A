@@ -44,7 +44,6 @@ const AdminUsersPage: React.FC = () => {
         setUsers(response.data.users);
         setError(null);
       } catch (err: any) {
-        console.error('Error fetching users:', err);
         setError(err.response?.data?.detail || 'Error al cargar usuarios');
       } finally {
         setLoading(false);
@@ -85,7 +84,6 @@ const AdminUsersPage: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al exportar usuarios:', error);
       alert('Error al exportar usuarios. Inténtalo de nuevo.');
     }
   };
@@ -108,7 +106,6 @@ const AdminUsersPage: React.FC = () => {
       </Badge>
     );
   };
-
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-CL', {

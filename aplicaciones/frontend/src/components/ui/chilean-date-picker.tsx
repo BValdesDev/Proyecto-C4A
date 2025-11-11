@@ -82,18 +82,3 @@ export function ChileanDatePicker({
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

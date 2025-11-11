@@ -10,7 +10,6 @@ from sqlalchemy.orm import relationship
 
 from .base import ModeloConUUID
 
-
 class Sesion(ModeloConUUID):
     """Modelo de sesión de usuario"""
     __tablename__ = "sesiones"

@@ -5,8 +5,9 @@ import { Button } from '../../components/ui/button'
 import { Badge } from '../../components/ui/badge'
 import { Progress } from '../../components/ui/progress'
 import { ArrowLeft, Save, CheckCircle } from 'lucide-react'
-import { api } from '../../utilidades/apiClient'
+import apiClient, { api } from '../../utilidades/apiClient'
 import { Evaluacion, Pregunta, RespuestaForm } from '../../tipos'
+import { toast } from 'react-hot-toast'
 
 export const EvaluacionPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -24,6 +25,28 @@ export const EvaluacionPage: React.FC = () => {
     }
   }, [id])
 
+  const cargarPreguntasCuestionario = async (cuestionarioId: string) => {
+    try {
+      const preguntasResponse = await api.get(`/api/v1/cuestionarios/${cuestionarioId}/preguntas`)
+      const preguntasFormateadas: Pregunta[] = preguntasResponse.map((pregunta: any, index: number) => ({
+        id: pregunta.pregunta_id,
+        codigo: pregunta.codigo_pregunta,
+        texto_pregunta: pregunta.texto_pregunta,
+        texto_ayuda: pregunta.texto_ayuda,
+        categoria: pregunta.seccion,
+        peso: pregunta.peso ?? 1,
+        tipo_respuesta: 'likert_5',
+        orden: pregunta.orden_pregunta ?? index + 1
+      }))
+
+      setPreguntas(preguntasFormateadas)
+      setPreguntaActual(0)
+    } catch (error) {
+      console.error('Error cargando preguntas del cuestionario:', error)
+      toast.error('No pudimos cargar las preguntas de la evaluación. Intenta nuevamente.')
+    }
+  }
+
   const cargarEvaluacion = async () => {
     try {
       setLoading(true)
@@ -31,14 +54,15 @@ export const EvaluacionPage: React.FC = () => {
       // Cargar evaluación
       const evaluacionResponse = await api.get(`/api/v1/evaluaciones/${id}`)
       setEvaluacion(evaluacionResponse)
-      
-      // Cargar preguntas
-      const preguntasResponse = await api.get(`/api/v1/evaluaciones/${id}/preguntas`)
-      setPreguntas(preguntasResponse)
+      if (evaluacionResponse.cuestionario_id) {
+        await cargarPreguntasCuestionario(evaluacionResponse.cuestionario_id)
+      } else {
+        setPreguntas([])
+      }
       
     } catch (error) {
       console.error('Error cargando evaluación:', error)
-      navigate('/evaluaciones')
+      navigate('/app/evaluaciones')
     } finally {
       setLoading(false)
     }
@@ -70,7 +94,7 @@ export const EvaluacionPage: React.FC = () => {
       await cargarEvaluacion()
       
     } catch (error) {
-      console.error('Error guardando respuestas:', error)
+          console.error('Error guardando respuestas:', error)
     } finally {
       setSaving(false)
     }
@@ -85,15 +109,49 @@ export const EvaluacionPage: React.FC = () => {
       
       if (response.success) {
         toast.success('¡Evaluación completada exitosamente!')
-        
-        // Navegar al dashboard
-        setTimeout(() => {
-          navigate('/app/dashboard')
-        }, 1500)
+        if (evaluacion?.cuestionario_id) {
+          try {
+            const analisis = await api.get(
+              `/api/v1/cuestionarios/${evaluacion.cuestionario_id}/calcular-resultado?evaluacion_id=${id}`
+            )
+
+            const respuestasArray = Object.values(respuestas)
+
+            const resultadoParaVista = {
+              puntuacion_global: analisis?.puntuacion_global ?? 0,
+              nivel_madurez: {
+                nombre: analisis?.nivel_madurez?.nombre ?? 'Sin clasificar',
+                descripcion: analisis?.nivel_madurez?.descripcion ?? 'Resultado sin descripción',
+                color: analisis?.nivel_madurez?.color ?? '#1E3A8A',
+                rango: analisis?.nivel_madurez?.rango ?? '0-0'
+              },
+              puntuaciones_por_seccion: analisis?.puntuaciones_por_seccion ?? {},
+              puntuaciones_dominio: analisis?.puntuaciones_por_seccion ?? {},
+              recomendaciones: analisis?.recomendaciones ?? [],
+              distribucion_respuestas: analisis?.distribucion_respuestas ?? {},
+              calidad_respuestas: analisis?.calidad_respuestas ?? {},
+              total_preguntas: analisis?.total_preguntas ?? respuestasArray.length,
+              preguntas_completadas: analisis?.preguntas_completadas ?? respuestasArray.length,
+              cuestionario_nombre: analisis?.cuestionario_nombre ?? evaluacion.nombre
+            }
+
+            navigate(`/app/diagnosticos/${evaluacion.cuestionario_id}/resultados`, {
+              state: {
+                resultado: resultadoParaVista,
+                respuestas: respuestasArray,
+                evaluacionId: id,
+                pdfGenerado: false
+              }
+            })
+          } catch (analisisError) {
+            console.error('Error obteniendo análisis de resultados:', analisisError)
+            toast.error('No pudimos calcular los resultados. Inténtalo nuevamente.')
+          }
+        }
       }
       
     } catch (error) {
-      console.error('Error finalizando evaluación:', error)
+          console.error('Error al finalizar la evaluación:', error)
       toast.error('Error al finalizar la evaluación')
     } finally {
       setSaving(false)
@@ -102,12 +160,18 @@ export const EvaluacionPage: React.FC = () => {
 
   const handleGenerarPDF = async () => {
     try {
-      // Descargar PDF directamente
-      const response = await fetch(`http://localhost:8000/api/v1/reportes/evaluacion/${id}/pdf`, {
+      const baseURL = apiClient.defaults.baseURL || 'http://localhost:8000'
+      const token = localStorage.getItem('c4a_token')
+
+      const response = await fetch(
+        `${baseURL}/api/v1/pdf/profesional/diagnostico/profesional/${id}`,
+        {
+          method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('c4a_token')}`
+            Authorization: token ? `Bearer ${token}` : ''
+          }
         }
-      })
+      )
       
       if (response.ok) {
         const blob = await response.blob()
@@ -142,6 +206,25 @@ export const EvaluacionPage: React.FC = () => {
     return textos[valor as keyof typeof textos] || 'No seleccionado'
   }
 
+  const getNivelMadurez = (puntuacion: number) => {
+    if (puntuacion < 20) return "Inicial"
+    if (puntuacion < 40) return "Básico"
+    if (puntuacion < 60) return "Intermedio"
+    if (puntuacion < 80) return "Gestionado"
+    return "Optimizado"
+  }
+
+  const getDescripcionNivel = (nivel: string) => {
+    const descripciones = {
+      "Inicial": "Procesos ad-hoc y no documentados",
+      "Básico": "Procesos básicos implementados",
+      "Intermedio": "Procesos definidos y documentados",
+      "Gestionado": "Procesos medidos y controlados",
+      "Optimizado": "Procesos optimizados y mejorados continuamente"
+    }
+    return descripciones[nivel as keyof typeof descripciones] || "Nivel no determinado"
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -155,13 +238,18 @@ export const EvaluacionPage: React.FC = () => {
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl font-bold mb-4">Evaluación no encontrada</h2>
-        <Button onClick={() => navigate('/evaluaciones')}>
+        <Button onClick={() => navigate('/app/evaluaciones')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Volver a Evaluaciones
         </Button>
       </div>
     )
   }
+
+  const totalPreguntas = evaluacion?.total_preguntas || preguntas.length
+  const preguntasCompletadas = evaluacion?.preguntas_completadas || 0
+  const porcentajeAvance =
+    totalPreguntas > 0 ? Math.round((preguntasCompletadas / totalPreguntas) * 100) : 0
 
   const pregunta = preguntas[preguntaActual]
   const respuestaActual = respuestas[pregunta?.id || '']
@@ -171,14 +259,14 @@ export const EvaluacionPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => navigate('/evaluaciones')}>
+          <Button variant="ghost" onClick={() => navigate('/app/evaluaciones')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">{evaluacion.nombre}</h1>
             <p className="text-muted-foreground">
-              {evaluacion.framework.nombre_mostrar}
+              {evaluacion.framework?.nombre_mostrar || evaluacion.framework?.nombre || 'N/A'}
             </p>
           </div>
         </div>
@@ -186,11 +274,6 @@ export const EvaluacionPage: React.FC = () => {
           <Badge variant="outline">
             {evaluacion.estado.replace('_', ' ')}
           </Badge>
-          {evaluacion.puntuacion_global && (
-            <Badge variant="secondary">
-              {evaluacion.puntuacion_global.toFixed(1)}/100
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -200,19 +283,21 @@ export const EvaluacionPage: React.FC = () => {
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Progreso de la evaluación</span>
-              <span>{evaluacion.porcentaje_completado.toFixed(0)}%</span>
+              <span>{porcentajeAvance}%</span>
             </div>
-            <Progress value={evaluacion.porcentaje_completado} className="h-2" />
+            <Progress value={porcentajeAvance} className="h-2" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Pregunta {preguntaActual + 1} de {preguntas.length}</span>
-              <span>{evaluacion.preguntas_completadas} completadas</span>
+              <span>
+                Pregunta {preguntas.length > 0 ? preguntaActual + 1 : 0} de {totalPreguntas}
+              </span>
+              <span>{preguntasCompletadas} completadas</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Pregunta actual */}
-      {pregunta && (
+      {evaluacion.estado !== 'completada' && pregunta && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -329,46 +414,128 @@ export const EvaluacionPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Evaluación completada */}
+      {/* Resultados de la evaluación completada */}
       {evaluacion.estado === 'completada' && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-green-800 mb-2">
-                ¡Evaluación Completada!
-              </h3>
-              <p className="text-green-700 mb-4">
-                Has completado la evaluación de ciberseguridad.
-                {evaluacion.puntuacion_global && (
-                  <span className="block mt-2 text-lg font-bold">
-                    Puntuación: {evaluacion.puntuacion_global.toFixed(1)}/100
+        <div className="space-y-6">
+          {/* Resultado principal */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-8 pb-8">
+              <div className="text-center">
+                <div className="w-32 h-32 mx-auto mb-6 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-4xl font-bold">
+                    {evaluacion.puntuacion_global?.toFixed(0) || 0}%
                   </span>
-                )}
-              </p>
-              <div className="flex justify-center space-x-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => navigate('/app/reportes')}
-                >
-                  Ver Reportes
-                </Button>
-                <Button 
-                  onClick={handleGenerarPDF}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  📄 Generar PDF
-                </Button>
-                <Button 
-                  onClick={() => navigate('/app/dashboard')}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  🏠 Volver al Dashboard
-                </Button>
+                </div>
+                
+                <h2 className="text-2xl font-bold text-blue-800 mb-2">
+                  Nivel de Madurez: {getNivelMadurez(evaluacion.puntuacion_global || 0)}
+                </h2>
+                <p className="text-blue-700 mb-6">
+                  {getDescripcionNivel(getNivelMadurez(evaluacion.puntuacion_global || 0))}
+                </p>
+                
+                {/* Barra de progreso */}
+                <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                  <div 
+                    className="bg-blue-600 h-4 rounded-full transition-all duration-500"
+                    style={{ width: `${evaluacion.puntuacion_global || 0}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-sm text-blue-700">
+                  <span>Puntuación Global</span>
+                  <span>Rango de puntuación: 61-80%</span>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Métricas resumidas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Total Preguntas</h3>
+                  <p className="text-3xl font-bold text-blue-600">{evaluacion.total_preguntas || 0}</p>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Puntuación Promedio</h3>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {((evaluacion.puntuacion_global || 0) / 20).toFixed(1)} / 5
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Nivel Alcanzado</h3>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {getNivelMadurez(evaluacion.puntuacion_global || 0)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recomendaciones */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Recomendaciones de Mejora</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 mb-4">
+                Acciones sugeridas para mejorar su nivel de madurez en ciberseguridad
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-start">
+                  <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">1</span>
+                  <span className="text-gray-700">Implementar monitoreo continuo de seguridad</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">2</span>
+                  <span className="text-gray-700">Realizar evaluaciones de vulnerabilidades periódicas</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium mr-3">3</span>
+                  <span className="text-gray-700">Mejorar la integración de controles de seguridad</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Botones de acción */}
+          <div className="flex justify-center space-x-4">
+            <Button 
+              onClick={handleGenerarPDF}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              📄 Descargar PDF
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => navigate('/app/reportes')}
+            >
+              📊 Ver Reportes
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => navigate('/app/diagnosticos')}
+            >
+              🔄 Nuevo Diagnóstico
+            </Button>
+          </div>
+
+          {/* Información adicional */}
+          <div className="text-center text-sm text-gray-500">
+            Los resultados se guardarán automáticamente en su historial. Puede descargar un informe en PDF o compartir los resultados con su equipo.
+          </div>
+        </div>
       )}
     </div>
   )

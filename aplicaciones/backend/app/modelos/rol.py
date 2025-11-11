@@ -12,7 +12,6 @@ import enum
 from .base import ModeloConUUID
 from ..core.config import NivelSuscripcion
 
-
 class TipoRol(str, enum.Enum):
     """Tipos de roles disponibles"""
     ADMIN_SISTEMA = "admin_sistema"
@@ -20,7 +19,6 @@ class TipoRol(str, enum.Enum):
     EVALUADOR = "evaluador"
     USUARIO_BASICO = "usuario_basico"
     AUDITOR = "auditor"
-
 
 class Rol(ModeloConUUID):
     """Modelo de rol con sistema de permisos"""

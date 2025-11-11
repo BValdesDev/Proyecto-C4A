@@ -66,14 +66,3 @@ export function TableSkeleton({
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-

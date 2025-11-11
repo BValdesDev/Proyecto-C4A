@@ -162,4 +162,3 @@ export const InvoiceCard: React.FC<InvoiceCardProps> = ({
   )
 }
 
-

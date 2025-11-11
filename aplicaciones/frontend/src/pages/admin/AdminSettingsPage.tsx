@@ -91,7 +91,6 @@ const AdminSettingsPage: React.FC = () => {
 
   const handleSave = () => {
     // TODO: Implementar guardado en API
-    console.log('Guardando configuración:', settings);
     setHasChanges(false);
     // Mostrar toast de éxito
   };

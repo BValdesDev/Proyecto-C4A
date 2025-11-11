@@ -492,4 +492,3 @@ class ReporteCiberseguridadService:
             "periodo_recuperacion": round(inversion_total / (beneficio_anual / 12), 1) if beneficio_anual > 0 else 0
         }
 
-

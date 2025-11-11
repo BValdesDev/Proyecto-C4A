@@ -144,7 +144,6 @@ export const IntegracionStripe: React.FC<PropiedadesIntegracionStripe> = ({
       setInfoFacturacion(infoResponse.data)
 
     } catch (error) {
-      console.error('Error cargando datos de Stripe:', error)
       toast.error('Error al cargar los datos de pago')
     } finally {
       setCargando(false)
@@ -248,7 +247,6 @@ export const IntegracionStripe: React.FC<PropiedadesIntegracionStripe> = ({
       toast.success('Información de facturación actualizada')
       
     } catch (error) {
-      console.error('Error actualizando información:', error)
       toast.error('Error al actualizar la información')
     } finally {
       setProcesando(false)

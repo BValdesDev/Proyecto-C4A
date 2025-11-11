@@ -154,7 +154,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       setEstadisticas(estadisticasResponse.data)
 
     } catch (error) {
-      console.error('Error cargando datos de usuarios:', error)
       toast.error('Error al cargar los datos de usuarios')
     } finally {
       setCargando(false)
@@ -180,7 +179,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       await cargarDatosUsuarios()
       
     } catch (error) {
-      console.error('Error creando usuario:', error)
       toast.error('Error al crear el usuario')
     } finally {
       setProcesando(false)
@@ -220,7 +218,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       await cargarDatosUsuarios()
       
     } catch (error) {
-      console.error('Error actualizando usuario:', error)
       toast.error('Error al actualizar el usuario')
     } finally {
       setProcesando(false)
@@ -237,7 +234,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       await cargarDatosUsuarios()
       
     } catch (error) {
-      console.error('Error eliminando usuario:', error)
       toast.error('Error al eliminar el usuario')
     } finally {
       setProcesando(false)
@@ -254,7 +250,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       await cargarDatosUsuarios()
       
     } catch (error) {
-      console.error('Error bloqueando usuario:', error)
       toast.error('Error al bloquear el usuario')
     } finally {
       setProcesando(false)
@@ -271,7 +266,6 @@ export const GestionUsuarios: React.FC<PropiedadesGestionUsuarios> = ({
       await cargarDatosUsuarios()
       
     } catch (error) {
-      console.error('Error desbloqueando usuario:', error)
       toast.error('Error al desbloquear el usuario')
     } finally {
       setProcesando(false)

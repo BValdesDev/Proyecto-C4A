@@ -23,6 +23,8 @@ from app.modelos.evaluacion import Evaluacion
 from app.modelos.usuario import Usuario
 from app.servicios.reporte_service import ReporteCiberseguridadService
 from ..dependencias import obtener_usuario_actual_dependencia
+from app.core.rate_limiting import get_rate_limiter
+from app.modelos.organizacion import Organizacion
 
 router = APIRouter()
 
@@ -69,6 +71,32 @@ async def obtener_reporte_evaluacion(
                 detail="La evaluación debe estar completada para generar el reporte"
             )
         
+        organizacion = db.query(Organizacion).filter(
+            Organizacion.id == usuario.organizacion_id
+        ).first()
+
+        nivel_suscripcion = organizacion.nivel_suscripcion.value if organizacion else "gratuito"
+
+        rate_limiter = get_rate_limiter()
+        limite_reportes = rate_limiter.check_report_limit(
+            str(usuario.organizacion_id),
+            nivel_suscripcion
+        )
+
+        if not limite_reportes["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Límite mensual de generación de reportes alcanzado",
+                headers={
+                    "Retry-After": "2592000",
+                    "X-RateLimit-Limit-Month": str(limite_reportes["limit"]),
+                    "X-RateLimit-Remaining-Month": str(
+                        max(limite_reportes["limit"] - limite_reportes["current_reports"], 0)
+                    ),
+                    "X-RateLimit-Period": limite_reportes["period"]
+                }
+            )
+
         # Generar reporte
         reporte_service = ReporteCiberseguridadService(db)
         reporte = reporte_service.generar_reporte_evaluacion(evaluacion_id)
@@ -122,6 +150,32 @@ async def generar_pdf_reporte(
                 detail="La evaluación debe estar completada para generar el PDF"
             )
         
+        organizacion = db.query(Organizacion).filter(
+            Organizacion.id == usuario.organizacion_id
+        ).first()
+
+        nivel_suscripcion = organizacion.nivel_suscripcion.value if organizacion else "gratuito"
+
+        rate_limiter = get_rate_limiter()
+        limite_reportes = rate_limiter.check_report_limit(
+            str(usuario.organizacion_id),
+            nivel_suscripcion
+        )
+
+        if not limite_reportes["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Límite mensual de generación de reportes alcanzado",
+                headers={
+                    "Retry-After": "2592000",
+                    "X-RateLimit-Limit-Month": str(limite_reportes["limit"]),
+                    "X-RateLimit-Remaining-Month": str(
+                        max(limite_reportes["limit"] - limite_reportes["current_reports"], 0)
+                    ),
+                    "X-RateLimit-Period": limite_reportes["period"]
+                }
+            )
+
         # Generar reporte
         reporte_service = ReporteCiberseguridadService(db)
         reporte = reporte_service.generar_reporte_evaluacion(evaluacion_id)
@@ -250,13 +304,18 @@ def generar_pdf_reporte(reporte: dict) -> bytes:
     # Métricas principales
     story.append(Paragraph("MÉTRICAS PRINCIPALES", subheading_style))
     
+    # Calcular porcentaje como (puntos_obtenidos / puntos_maximos) * 100
+    puntuacion_obtenida = metricas['puntuacion_total']
+    puntuacion_maxima = metricas['puntuacion_maxima']
+    porcentaje_calculado = (puntuacion_obtenida / puntuacion_maxima * 100) if puntuacion_maxima > 0 else 0.0
+    
     metricas_data = [
         ["Métrica", "Valor"],
         ["Puntuación Promedio", f"{metricas['puntuacion_promedio']}/5.0"],
         ["Porcentaje Logrado", f"{metricas['porcentaje_logrado']:.1f}%"],
         ["Nivel de Madurez", nivel_madurez],
         ["Total de Preguntas", str(metricas['total_respuestas'])],
-        ["Puntuación Total", f"{metricas['puntuacion_total']}/{metricas['puntuacion_maxima']}"]
+        ["Puntuación Obtenida", f"{puntuacion_obtenida:.1f}/{puntuacion_maxima:.1f} ({porcentaje_calculado:.1f}%)"]
     ]
     
     metricas_table = Table(metricas_data, colWidths=[3*inch, 2*inch])
@@ -282,9 +341,13 @@ def generar_pdf_reporte(reporte: dict) -> bytes:
     for categoria, datos in categorias.items():
         story.append(Paragraph(f"{categoria.upper()}", subheading_style))
         
+        # Asegurar que el porcentaje se calcule correctamente
+        puntuacion_obtenida_cat = datos['puntuacion_total']
+        puntuacion_maxima_cat = datos['puntuacion_maxima']
+        porcentaje_calculado_cat = (puntuacion_obtenida_cat / puntuacion_maxima_cat * 100) if puntuacion_maxima_cat > 0 else 0.0
+        
         categoria_text = f"""
-        <b>Puntuación:</b> {datos['puntuacion_total']}/{datos['puntuacion_maxima']} 
-        ({datos['porcentaje']:.1f}%)
+        <b>Puntuación Obtenida:</b> {puntuacion_obtenida_cat:.1f}/{puntuacion_maxima_cat:.1f} ({porcentaje_calculado_cat:.1f}%)
         
         <b>Fortalezas:</b> {len(datos['fortalezas'])} áreas bien implementadas
         <b>Debilidades:</b> {len(datos['debilidades'])} áreas que requieren atención

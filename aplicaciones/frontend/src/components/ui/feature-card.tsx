@@ -46,14 +46,3 @@ export function FeatureCard({
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-

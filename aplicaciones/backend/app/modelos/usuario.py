@@ -11,14 +11,12 @@ import enum
 
 from .base import ModeloConEliminacionLogica
 
-
 class EstadoCuenta(str, enum.Enum):
     """Estados de cuenta de usuario"""
     ACTIVO = "activo"
     BLOQUEADO = "bloqueado"
     PENDIENTE = "pendiente"
     SUSPENDIDO = "suspendido"
-
 
 class Usuario(ModeloConEliminacionLogica):
     """Modelo de usuario con autenticación segura"""

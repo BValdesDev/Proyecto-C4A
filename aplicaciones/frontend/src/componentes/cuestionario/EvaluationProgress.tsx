@@ -116,4 +116,3 @@ export const EvaluationProgress: React.FC<EvaluationProgressProps> = ({
   )
 }
 
-

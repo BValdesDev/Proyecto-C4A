@@ -29,7 +29,6 @@ def actualizar_montos():
         
         for suscripcion in suscripciones_pro:
             if suscripcion.monto_centavos != 2499000:  # Solo actualizar si es diferente
-                print(f"📝 Actualizando {suscripcion.organizacion.nombre}: Pro {suscripcion.monto_centavos} -> 2499000")
                 suscripcion.monto_centavos = 2499000
         
         # Actualizar suscripciones Empresarial
@@ -39,7 +38,6 @@ def actualizar_montos():
         
         for suscripcion in suscripciones_empresarial:
             if suscripcion.monto_centavos != 7999000:  # Solo actualizar si es diferente
-                print(f"📝 Actualizando {suscripcion.organizacion.nombre}: Empresarial {suscripcion.monto_centavos} -> 7999000")
                 suscripcion.monto_centavos = 7999000
         
         # Actualizar suscripciones Gratuito (asegurar que sean 0)
@@ -49,7 +47,6 @@ def actualizar_montos():
         
         for suscripcion in suscripciones_gratuito:
             if suscripcion.monto_centavos != 0:
-                print(f"📝 Actualizando {suscripcion.organizacion.nombre}: Gratuito {suscripcion.monto_centavos} -> 0")
                 suscripcion.monto_centavos = 0
         
         db.commit()
@@ -62,9 +59,7 @@ def actualizar_montos():
         
         for suscripcion in todas_las_suscripciones:
             monto_formateado = f"${suscripcion.monto_centavos // 100:,.0f}" if suscripcion.monto_centavos > 0 else "Gratuito"
-            print(f"  - {suscripcion.organizacion.nombre}: {suscripcion.nivel.value} - {monto_formateado}")
-        
-    except Exception as e:
+            except Exception as e:
         print(f"❌ Error actualizando montos: {e}")
         db.rollback()
     finally:
@@ -72,6 +67,5 @@ def actualizar_montos():
 
 if __name__ == "__main__":
     actualizar_montos()
-
 
 

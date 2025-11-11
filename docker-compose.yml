@@ -1,5 +1,6 @@
 # docker-compose.yml
 # Configuración de desarrollo para C4A SaaS
+# Optimizado para Docker Desktop
 
 version: '3.8'
 
@@ -51,26 +52,14 @@ services:
       dockerfile: Dockerfile
     container_name: c4a_backend
     environment:
-      - ENVIRONMENT=development
+      - ENTORNO=desarrollo
       - DEBUG=true
-      - DATABASE_URL=postgresql+asyncpg://c4a_user:c4a_password@db:5432/c4a_saas
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
-      - JWT_ALGORITHM=RS256
-      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
-      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
-      - STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
-      - STRIPE_SECRET_KEY=sk_test_your_stripe_secret
-      - STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-      - EMAIL_HOST=smtp.gmail.com
-      - EMAIL_PORT=587
-      - EMAIL_USERNAME=your-email@gmail.com
-      - EMAIL_PASSWORD=your-app-password
-      - TELEMETRY_ENABLED=false
-      - LOG_LEVEL=INFO
+      - HABILITAR_SECURITY_MIDDLEWARE=true
+      - URL_BASE_DATOS=postgresql+asyncpg://c4a_user:c4a_password@db:5432/c4a_saas
+      - URL_REDIS=redis://redis:6379/0
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173
     ports:
-      - "8000:8000"
+      - "9000:8000"
     volumes:
       - ./aplicaciones/backend:/app
       - /app/__pycache__
@@ -94,10 +83,11 @@ services:
       dockerfile: Dockerfile
     container_name: c4a_frontend
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
-      - REACT_APP_ENVIRONMENT=development
+      - VITE_API_URL=http://localhost:9000
+      - VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
+      - VITE_ENVIRONMENT=development
       - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
     ports:
       - "3000:3000"
     volumes:
@@ -108,7 +98,7 @@ services:
     networks:
       - c4a_network
     restart: unless-stopped
-    command: npm run dev
+    command: npm run dev -- --host 0.0.0.0 --port 3000
 
   # Nginx como proxy reverso
   nginx:

@@ -16,9 +16,8 @@ from typing import Dict, Any
 
 from .core.config import config
 from .core.excepciones import ExcepcionC4A, convertir_excepcion_c4a_a_http
-from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, dashboard, admin
+from .api.v1.endpoints import auth, usuarios, organizaciones, evaluaciones, reportes, suscripciones, dashboard, admin, cuestionarios, pdf_profesional
 from .modelos.base import crear_tablas
-
 
 # Configurar logging
 logging.basicConfig(
@@ -26,7 +25,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,7 +44,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Cerrando C4A SaaS API...")
-
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -88,8 +85,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware de seguridad principal (deshabilitado temporalmente para desarrollo)
-# app.add_middleware(SecurityMiddleware)
+if config.habilitar_security_middleware:
+    app.add_middleware(SecurityMiddleware)
 
 # Middleware para agregar headers de seguridad (deshabilitado temporalmente para desarrollo)
 # @app.middleware("http")
@@ -252,6 +249,17 @@ app.include_router(
     tags=["Administración"]
 )
 
+app.include_router(
+    cuestionarios.router,
+    prefix="/api/v1/cuestionarios",
+    tags=["Cuestionarios"]
+)
+
+app.include_router(
+    pdf_profesional.router,
+    prefix="/api/v1/pdf/profesional",
+    tags=["PDF Profesional"]
+)
 
 # Configuración de logging para producción
 if not config.debug:

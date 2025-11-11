@@ -11,7 +11,6 @@ from sqlalchemy.orm import relationship
 from .base import ModeloConUUID
 from ..core.config import NivelSuscripcion
 
-
 class Framework(ModeloConUUID):
     """Modelo de framework de ciberseguridad"""
     __tablename__ = "frameworks"
@@ -31,6 +30,7 @@ class Framework(ModeloConUUID):
     # Relaciones
     preguntas = relationship("Pregunta", back_populates="framework", cascade="all, delete-orphan")
     evaluaciones = relationship("Evaluacion", back_populates="framework")
+    cuestionarios = relationship("Cuestionario", back_populates="framework", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Framework(id={self.id}, nombre='{self.nombre_mostrar}')>"

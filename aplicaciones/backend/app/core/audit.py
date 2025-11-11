@@ -318,18 +318,3 @@ def get_audit_service(db: Session) -> AuditService:
     """Obtener instancia del servicio de auditoría"""
     return AuditService(db)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

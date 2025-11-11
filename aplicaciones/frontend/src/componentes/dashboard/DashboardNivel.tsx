@@ -140,7 +140,6 @@ export const DashboardNivel: React.FC<PropiedadesDashboard> = ({
       }
 
     } catch (error) {
-      console.error('Error cargando datos del dashboard:', error)
       toast.error('Error al cargar los datos del dashboard')
     } finally {
       setCargando(false)

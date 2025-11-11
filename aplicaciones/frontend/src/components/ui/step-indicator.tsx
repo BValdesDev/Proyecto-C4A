@@ -75,14 +75,3 @@ export function StepIndicator({ steps, className }: StepIndicatorProps) {
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-

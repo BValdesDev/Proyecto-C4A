@@ -11,7 +11,6 @@ from sqlalchemy.orm import relationship
 from .base import ModeloConEliminacionLogica
 from ..core.config import NivelSuscripcion
 
-
 class Reporte(ModeloConEliminacionLogica):
     """Modelo de reporte de evaluación"""
     __tablename__ = "reportes"

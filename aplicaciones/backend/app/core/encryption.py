@@ -122,18 +122,3 @@ def decrypt_database_field(encrypted_value: Optional[str]) -> Optional[str]:
     """Descifrar campo de base de datos"""
     return get_encryption_service().decrypt_field(encrypted_value)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

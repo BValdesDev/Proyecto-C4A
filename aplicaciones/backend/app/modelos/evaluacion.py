@@ -12,14 +12,12 @@ import enum
 from .base import ModeloConEliminacionLogica
 from ..core.config import NivelSuscripcion
 
-
 class EstadoEvaluacion(str, enum.Enum):
     """Estados de evaluación"""
     BORRADOR = "borrador"
     EN_PROGRESO = "en_progreso"
     COMPLETADA = "completada"
     ARCHIVADA = "archivada"
-
 
 class Evaluacion(ModeloConEliminacionLogica):
     """Modelo de evaluación de ciberseguridad"""
@@ -31,6 +29,7 @@ class Evaluacion(ModeloConEliminacionLogica):
     # Relaciones
     organizacion_id = Column(UUID(as_uuid=True), ForeignKey("organizaciones.id", ondelete="CASCADE"), nullable=False)
     framework_id = Column(UUID(as_uuid=True), ForeignKey("frameworks.id"), nullable=False)
+    cuestionario_id = Column(UUID(as_uuid=True), ForeignKey("cuestionarios.id"), nullable=True)  # Opcional
     creado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     
     # Gestión de nivel (CRÍTICO)
@@ -54,6 +53,7 @@ class Evaluacion(ModeloConEliminacionLogica):
     # Relaciones
     organizacion = relationship("Organizacion", back_populates="evaluaciones")
     framework = relationship("Framework", back_populates="evaluaciones")
+    cuestionario = relationship("Cuestionario", back_populates="evaluaciones")
     creado_por_usuario = relationship("Usuario", back_populates="evaluaciones_creadas", foreign_keys=[creado_por])
     respuestas = relationship("Respuesta", back_populates="evaluacion", cascade="all, delete-orphan")
     reportes = relationship("Reporte", back_populates="evaluacion", cascade="all, delete-orphan")

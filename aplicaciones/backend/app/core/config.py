@@ -10,13 +10,11 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import os
 
-
 class NivelSuscripcion(str, Enum):
     """Niveles de suscripción disponibles"""
     GRATUITO = "gratuito"
     PRO = "pro"
     EMPRESARIAL = "empresarial"
-
 
 class ConfiguracionSeguridad(BaseSettings):
     """Configuración de seguridad y autenticación"""
@@ -24,6 +22,7 @@ class ConfiguracionSeguridad(BaseSettings):
     # Configuración general
     entorno: str = "desarrollo"
     debug: bool = True
+    habilitar_security_middleware: bool = True
     
     # Configuración de email para notificaciones
     email_user: str = "c4a.notifications@gmail.com"
@@ -147,8 +146,7 @@ Qn6caGISM5fcqWt4bvr6eh8=
     saltar_verificacion_email: bool = True
     saltar_webhooks_stripe: bool = True
     simular_servicios_externos: bool = True
-    
-    
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": False
@@ -167,7 +165,6 @@ Qn6caGISM5fcqWt4bvr6eh8=
         if not v.startswith(('redis://', 'rediss://')):
             raise ValueError('URL de Redis debe ser válida')
         return v
-
 
 # Configuración de límites por nivel
 LIMITES_POR_NIVEL = {

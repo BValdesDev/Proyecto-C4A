@@ -39,7 +39,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         user_agent = request.headers.get("User-Agent", "")
         
         # Verificar rate limiting
-        if request.url.path.startswith("/api/"):
+        rutas_excluidas = {
+            "/api/v1/auth/iniciar-sesion",
+            "/api/v1/auth/renovar-token",
+            "/api/v1/auth/registro"
+        }
+
+        if request.url.path.startswith("/api/") and request.url.path not in rutas_excluidas:
             try:
                 # Obtener nivel de suscripción del usuario (si está autenticado)
                 nivel_suscripcion = await self.get_user_subscription_level(request)

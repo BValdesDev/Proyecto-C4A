@@ -12,14 +12,12 @@ import enum
 from .base import ModeloConEliminacionLogica
 from ..core.config import NivelSuscripcion
 
-
 class TamañoEmpresa(str, enum.Enum):
     """Tamaños de empresa según clasificación chilena"""
     MICRO = "micro"  # < 10 empleados
     PEQUEÑA = "pequeña"  # 10-49 empleados
     MEDIANA = "mediana"  # 50-199 empleados
     GRANDE = "grande"  # 200+ empleados
-
 
 class Sector(str, enum.Enum):
     """Sectores económicos chilenos"""
@@ -33,7 +31,6 @@ class Sector(str, enum.Enum):
     SERVICIOS = "servicios"
     CONSTRUCCION = "construccion"
     MINERIA = "mineria"
-
 
 class Organizacion(ModeloConEliminacionLogica):
     """Modelo de organización con soporte para niveles de suscripción"""

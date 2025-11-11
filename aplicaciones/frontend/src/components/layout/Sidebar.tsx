@@ -10,7 +10,8 @@ import {
   Users,
   Settings,
   Shield,
-  HelpCircle
+  HelpCircle,
+  ClipboardList
 } from 'lucide-react'
 
 const menuItems = [
@@ -19,6 +20,13 @@ const menuItems = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     path: '/app/dashboard',
+    nivel_requerido: 'gratuito'
+  },
+  {
+    id: 'diagnosticos',
+    label: 'Mi Evaluación',
+    icon: ClipboardList,
+    path: '/app/diagnosticos',
     nivel_requerido: 'gratuito'
   },
   {

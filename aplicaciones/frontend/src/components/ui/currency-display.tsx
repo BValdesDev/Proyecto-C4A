@@ -46,18 +46,3 @@ export function CurrencyDisplay({
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

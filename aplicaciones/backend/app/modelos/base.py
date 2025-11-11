@@ -32,7 +32,6 @@ Base = declarative_base()
 # Metadatos
 metadata = MetaData()
 
-
 class ModeloConUUID(Base):
     """Modelo base con UUID como clave primaria"""
     __abstract__ = True
@@ -41,18 +40,15 @@ class ModeloConUUID(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_actualizacion = Column(DateTime(timezone=True), onupdate=func.now())
 
-
 class ModeloConEliminacionLogica(ModeloConUUID):
     """Modelo base con eliminación lógica"""
     __abstract__ = True
     
     fecha_eliminacion = Column(DateTime(timezone=True), nullable=True)
 
-
 def crear_tablas():
     """Crear todas las tablas"""
     Base.metadata.create_all(bind=engine)
-
 
 def obtener_sesion():
     """Obtener sesión de base de datos"""

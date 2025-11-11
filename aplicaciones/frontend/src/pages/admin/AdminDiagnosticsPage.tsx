@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
   Building,
   User
 } from 'lucide-react';
+import { apiClient } from '@/utilidades/apiClient';
 
 interface Diagnostic {
   id: string;
@@ -31,67 +32,40 @@ const AdminDiagnosticsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterFramework, setFilterFramework] = useState<string>('all');
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: Conectar con API real
-  const diagnostics: Diagnostic[] = [
-    {
-      id: '1',
-      companyName: 'Empresa ABC',
-      userName: 'Juan Pérez',
-      framework: 'NIST',
-      status: 'completado',
-      score: 85,
-      maxScore: 100,
-      createdAt: '2025-10-14T08:00:00Z',
-      completedAt: '2025-10-14T10:30:00Z',
-      progress: 100,
-    },
-    {
-      id: '2',
-      companyName: 'TechCorp Chile',
-      userName: 'María González',
-      framework: 'COBIT',
-      status: 'en_progreso',
-      score: 0,
-      maxScore: 100,
-      createdAt: '2025-10-14T09:15:00Z',
-      progress: 65,
-    },
-    {
-      id: '3',
-      companyName: 'Startup Innovadora',
-      userName: 'Carlos Silva',
-      framework: 'ISO 27001',
-      status: 'pendiente',
-      score: 0,
-      maxScore: 100,
-      createdAt: '2025-10-13T14:30:00Z',
-      progress: 0,
-    },
-    {
-      id: '4',
-      companyName: 'Consultora Digital',
-      userName: 'Ana Martínez',
-      framework: 'NIST',
-      status: 'completado',
-      score: 92,
-      maxScore: 100,
-      createdAt: '2025-10-12T11:20:00Z',
-      completedAt: '2025-10-13T16:45:00Z',
-      progress: 100,
-    },
-  ];
+  // Cargar datos reales de la API
+  useEffect(() => {
+    const fetchDiagnostics = async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get('/api/v1/admin/diagnostics');
+        setDiagnostics(response.data.diagnostics || []);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching diagnostics:', err);
+        setError(err.response?.data?.detail || 'Error al cargar diagnósticos');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDiagnostics();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const variants = {
-      completado: 'bg-green-100 text-green-800',
+      completada: 'bg-green-100 text-green-800',
+      completado: 'bg-green-100 text-green-800', // Para compatibilidad
       en_progreso: 'bg-blue-100 text-blue-800',
       pendiente: 'bg-yellow-100 text-yellow-800',
       cancelado: 'bg-red-100 text-red-800',
     };
     
     return (
-      <Badge className={variants[status as keyof typeof variants]}>
+      <Badge className={variants[status as keyof typeof variants] || 'bg-gray-100 text-gray-800'}>
         {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
       </Badge>
     );
@@ -137,17 +111,49 @@ const AdminDiagnosticsPage: React.FC = () => {
     return matchesSearch && matchesStatus && matchesFramework;
   });
 
-  // Estadísticas rápidas
+  // Estadísticas calculadas dinámicamente
   const stats = {
     total: diagnostics.length,
-    completed: diagnostics.filter(d => d.status === 'completado').length,
+    completed: diagnostics.filter(d => d.status === 'completada').length,
     inProgress: diagnostics.filter(d => d.status === 'en_progreso').length,
     pending: diagnostics.filter(d => d.status === 'pendiente').length,
     averageScore: diagnostics
-      .filter(d => d.status === 'completado')
+      .filter(d => d.status === 'completada' && d.score > 0)
       .reduce((acc, d) => acc + d.score, 0) / 
-      diagnostics.filter(d => d.status === 'completado').length || 0,
+      diagnostics.filter(d => d.status === 'completada' && d.score > 0).length || 0,
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Diagnósticos</h1>
+          <p className="text-gray-600 mt-2">Cargando diagnósticos...</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Diagnósticos</h1>
+          <p className="text-red-600 mt-2">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -261,7 +267,7 @@ const AdminDiagnosticsPage: React.FC = () => {
                 className="border border-gray-300 rounded-md px-3 py-2 text-sm"
               >
                 <option value="all">Todos los estados</option>
-                <option value="completado">Completados</option>
+                <option value="completada">Completados</option>
                 <option value="en_progreso">En Progreso</option>
                 <option value="pendiente">Pendientes</option>
                 <option value="cancelado">Cancelados</option>

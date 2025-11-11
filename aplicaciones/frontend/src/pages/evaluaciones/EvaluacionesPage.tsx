@@ -4,15 +4,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button'
 import { Badge } from '../../components/ui/badge'
 import { Input } from '../../components/ui/input'
-import { Plus, Search, Filter, MoreHorizontal } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu'
+import { toast } from '../../components/ui/use-toast'
+import { Loader2, MoreHorizontal, Filter, Plus, Search, Trash2 } from 'lucide-react'
 import { api } from '../../utilidades/apiClient'
 import { Evaluacion } from '../../tipos'
+import { OnboardingEvaluaciones } from '../../components/onboarding/OnboardingEvaluaciones'
+import { useAuth } from '../../hooks/useAuth'
 
 export const EvaluacionesPage: React.FC = () => {
   const navigate = useNavigate()
+  const { usuario } = useAuth()
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false)
+  const [evaluacionSeleccionada, setEvaluacionSeleccionada] = useState<Evaluacion | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [creandoEvaluacion, setCreandoEvaluacion] = useState(false)
 
   useEffect(() => {
     cargarEvaluaciones()
@@ -24,9 +48,92 @@ export const EvaluacionesPage: React.FC = () => {
       const response = await api.get('/api/v1/evaluaciones/?pagina=1&por_pagina=50')
       setEvaluaciones(response.evaluaciones)
     } catch (error) {
-      console.error('Error cargando evaluaciones:', error)
-    } finally {
+      } finally {
       setLoading(false)
+    }
+  }
+
+  const manejarEliminarClick = (evaluacion: Evaluacion) => {
+    setEvaluacionSeleccionada(evaluacion)
+    setMostrarConfirmacion(true)
+  }
+
+  const manejarCambioDialogo = (open: boolean) => {
+    if (!open && !eliminando) {
+      setMostrarConfirmacion(false)
+      setEvaluacionSeleccionada(null)
+    } else {
+      setMostrarConfirmacion(open)
+    }
+  }
+
+  const eliminarEvaluacion = async () => {
+    if (!evaluacionSeleccionada) {
+      return
+    }
+
+    try {
+      setEliminando(true)
+      await api.delete(`/api/v1/evaluaciones/${evaluacionSeleccionada.id}`)
+      setEvaluaciones((prev) => prev.filter((item) => item.id !== evaluacionSeleccionada.id))
+      toast({
+        title: 'Evaluación eliminada',
+        description: 'El registro se eliminó correctamente.',
+      })
+    } catch (error: any) {
+      const mensaje =
+        error?.response?.data?.mensaje ||
+        error?.response?.data?.detail ||
+        'No fue posible eliminar la evaluación. Inténtalo nuevamente.'
+      toast({
+        title: 'Error al eliminar',
+        description: mensaje,
+        variant: 'destructive',
+      })
+    } finally {
+      setEliminando(false)
+      setMostrarConfirmacion(false)
+      setEvaluacionSeleccionada(null)
+    }
+  }
+
+  const crearEvaluacionRapida = async () => {
+    if (creandoEvaluacion) {
+      return
+    }
+
+    try {
+      setCreandoEvaluacion(true)
+      const fecha = new Date().toLocaleDateString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+      const nombre = `Evaluación Plan Pro - ${fecha}`
+
+      const response = await api.post('/api/v1/dashboard/evaluaciones', {
+        nombre,
+      })
+
+      toast({
+        title: 'Evaluación creada',
+        description: 'Generamos el diagnóstico de 50 preguntas para tu Plan Pro. ¡Listo para comenzar!',
+      })
+
+      navigate(`/app/evaluaciones/${response.id}`)
+    } catch (error: any) {
+      const mensaje =
+        error?.response?.data?.mensaje ||
+        error?.response?.data?.detail ||
+        'No fue posible crear la evaluación. Inténtalo nuevamente.'
+
+      toast({
+        title: 'Error al crear evaluación',
+        description: mensaje,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreandoEvaluacion(false)
     }
   }
 
@@ -70,9 +177,18 @@ export const EvaluacionesPage: React.FC = () => {
             Gestiona tus evaluaciones de ciberseguridad
           </p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Evaluación
+        <Button onClick={crearEvaluacionRapida} disabled={creandoEvaluacion}>
+          {creandoEvaluacion ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Creando...
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Evaluación
+            </>
+          )}
         </Button>
       </div>
 
@@ -96,16 +212,11 @@ export const EvaluacionesPage: React.FC = () => {
       {/* Lista de evaluaciones */}
       {evaluacionesFiltradas.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-12">
-            <div className="text-muted-foreground">
-              <Plus className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No hay evaluaciones</h3>
-              <p className="mb-4">Crea tu primera evaluación de ciberseguridad</p>
-              <Button onClick={() => navigate('/evaluaciones/crear')}>
-                <Plus className="w-4 h-4 mr-2" />
-                Crear Evaluación
-              </Button>
-            </div>
+          <CardContent className="py-12">
+            <OnboardingEvaluaciones
+              onCrearEvaluacion={crearEvaluacionRapida}
+              creandoEvaluacion={creandoEvaluacion}
+            />
           </CardContent>
         </Card>
       ) : (
@@ -117,12 +228,27 @@ export const EvaluacionesPage: React.FC = () => {
                   <div className="flex-1">
                     <CardTitle className="text-lg">{evaluacion.nombre}</CardTitle>
                     <CardDescription>
-                      {evaluacion.framework.nombre_mostrar}
+                      {evaluacion.framework?.nombre_mostrar || evaluacion.framework?.nombre || 'N/A'}
                     </CardDescription>
                   </div>
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
+                  {usuario?.organizacion?.nivel_suscripcion === 'pro' && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Acciones de evaluación">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => manejarEliminarClick(evaluacion)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Eliminar evaluación
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -140,7 +266,7 @@ export const EvaluacionesPage: React.FC = () => {
                   </div>
 
                   {/* Progreso */}
-                  {evaluacion.estado === 'en_progreso' && (
+                  {evaluacion.estado === 'en_progreso' && evaluacion.porcentaje_completado && (
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span>Progreso</span>
@@ -167,7 +293,7 @@ export const EvaluacionesPage: React.FC = () => {
                   {/* Acciones */}
                   <div className="flex space-x-2">
                     <Button asChild className="flex-1">
-                      <Link to={`/evaluaciones/${evaluacion.id}`}>
+                      <Link to={`/app/evaluaciones/${evaluacion.id}`}>
                         {evaluacion.estado === 'completada' ? 'Ver Resultados' : 'Continuar'}
                       </Link>
                     </Button>
@@ -178,6 +304,28 @@ export const EvaluacionesPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      <AlertDialog open={mostrarConfirmacion} onOpenChange={manejarCambioDialogo}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar evaluación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará la evaluación seleccionada y sus datos asociados. No podrás deshacer este cambio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={eliminarEvaluacion}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={eliminando}
+            >
+              {eliminando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -24,6 +24,15 @@ import { ReportesPage } from './pages/reportes/ReportesPage'
 import { SuscripcionesPage } from './pages/suscripciones/SuscripcionesPage'
 import { PerfilPage } from './pages/perfil/PerfilPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import ListaDiagnosticos from './pages/diagnosticos/ListaDiagnosticos'
+import DetalleDiagnostico from './pages/diagnosticos/DetalleDiagnostico'
+import ResponderDiagnostico from './pages/diagnosticos/ResponderDiagnostico'
+import ResultadosDiagnostico from './pages/diagnosticos/ResultadosDiagnostico'
+
+// Plan Pages
+import PlanGratuitoPage from './pages/planes/PlanGratuitoPage'
+import PlanProPage from './pages/planes/PlanProPage'
+import PlanEmpresarialPage from './pages/planes/PlanEmpresarialPage'
 
 // Admin Pages
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
@@ -63,9 +72,16 @@ function App() {
                 <Route path="evaluaciones" element={<EvaluacionesPage />} />
                 <Route path="evaluaciones/crear" element={<CrearEvaluacionPage />} />
                 <Route path="evaluaciones/:id" element={<EvaluacionPage />} />
+                <Route path="diagnosticos" element={<ListaDiagnosticos />} />
+                <Route path="diagnosticos/:id" element={<DetalleDiagnostico />} />
+                <Route path="diagnosticos/:id/responder" element={<ResponderDiagnostico />} />
+                <Route path="diagnosticos/:id/resultados" element={<ResultadosDiagnostico />} />
                 <Route path="reportes" element={<ReportesPage />} />
                 <Route path="suscripciones" element={<SuscripcionesPage />} />
                 <Route path="perfil" element={<PerfilPage />} />
+                <Route path="plan-gratuito" element={<PlanGratuitoPage />} />
+                <Route path="plan-pro" element={<PlanProPage />} />
+                <Route path="plan-empresarial" element={<PlanEmpresarialPage />} />
               </Route>
 
               {/* Rutas protegidas para administradores */}

@@ -16,7 +16,6 @@ from app.modelos.framework import Framework
 from app.core.config import NivelSuscripcion, LIMITES_POR_NIVEL
 from app.core.excepciones import ExcepcionC4A, ExcepcionValidacion
 
-
 class DashboardService:
     """Servicio para lógica de negocio del dashboard"""
     

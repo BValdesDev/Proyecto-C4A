@@ -16,12 +16,12 @@ from app.modelos.usuario import Usuario
 from app.modelos.evaluacion import Evaluacion, EstadoEvaluacion
 from app.modelos.organizacion import Organizacion
 from app.modelos.framework import Framework
+from app.modelos.cuestionario import Cuestionario, NivelCuestionario
 from app.core.config import NivelSuscripcion
 from app.core.excepciones import ExcepcionC4A, ExcepcionValidacion
 from ..dependencias import obtener_usuario_actual_dependencia
 
 router = APIRouter()
-
 
 # Modelos Pydantic para respuestas
 class DashboardSummary(BaseModel):
@@ -34,7 +34,6 @@ class DashboardSummary(BaseModel):
     limite_mensual: int
     porcentaje_uso: float
 
-
 class EvaluacionReciente(BaseModel):
     """Evaluación reciente"""
     id: str
@@ -43,7 +42,6 @@ class EvaluacionReciente(BaseModel):
     estado: str
     puntuacion: Optional[float]
     porcentaje_completado: float
-
 
 class AccionRapida(BaseModel):
     """Acción rápida disponible"""
@@ -54,12 +52,10 @@ class AccionRapida(BaseModel):
     icono: str
     ruta: str
 
-
 class CrearEvaluacionRequest(BaseModel):
     """Request para crear nueva evaluación"""
     nombre: str
     framework_id: Optional[str] = None
-
 
 class CrearEvaluacionResponse(BaseModel):
     """Response de creación de evaluación"""
@@ -68,7 +64,6 @@ class CrearEvaluacionResponse(BaseModel):
     estado: str
     fecha_creacion: datetime
     mensaje: str
-
 
 @router.get("/summary", response_model=DashboardSummary)
 async def obtener_resumen_dashboard(
@@ -134,7 +129,6 @@ async def obtener_resumen_dashboard(
             detail=f"Error al obtener resumen del dashboard: {str(e)}"
         )
 
-
 @router.get("/evaluaciones-recientes", response_model=List[EvaluacionReciente])
 async def obtener_evaluaciones_recientes(
     db: Session = Depends(obtener_sesion),
@@ -175,7 +169,6 @@ async def obtener_evaluaciones_recientes(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener evaluaciones recientes: {str(e)}"
         )
-
 
 @router.post("/evaluaciones", response_model=CrearEvaluacionResponse)
 async def crear_nueva_evaluacion(
@@ -233,15 +226,57 @@ async def crear_nueva_evaluacion(
                     detail="No hay frameworks disponibles"
                 )
         
+        # Seleccionar cuestionario según el nivel de suscripción
+        mapa_cuestionarios = {
+            NivelSuscripcion.GRATUITO: NivelCuestionario.basico,
+            NivelSuscripcion.PRO: NivelCuestionario.intermedio,
+            NivelSuscripcion.EMPRESARIAL: NivelCuestionario.avanzado
+        }
+
+        nivel_cuestionario = mapa_cuestionarios.get(organizacion.nivel_suscripcion, NivelCuestionario.basico)
+
+        cuestionario = (
+            db.query(Cuestionario)
+            .filter(
+                Cuestionario.nivel == nivel_cuestionario,
+                Cuestionario.framework_id == framework.id,
+                Cuestionario.esta_activo.is_(True),
+                Cuestionario.fecha_eliminacion.is_(None)
+            )
+            .order_by(Cuestionario.fecha_creacion.asc())
+            .first()
+        )
+
+        if not cuestionario:
+            cuestionario = (
+                db.query(Cuestionario)
+                .filter(
+                    Cuestionario.framework_id == framework.id,
+                    Cuestionario.esta_activo.is_(True),
+                    Cuestionario.fecha_eliminacion.is_(None)
+                )
+                .order_by(Cuestionario.fecha_creacion.asc())
+                .first()
+            )
+
+        if not cuestionario:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No hay cuestionarios disponibles para generar la evaluación"
+            )
+
         # Crear nueva evaluación
         nueva_evaluacion = Evaluacion(
             nombre=request.nombre,
             organizacion_id=organizacion.id,
             framework_id=framework.id,
+            cuestionario_id=cuestionario.id,
             creado_por=usuario_actual.id,
             nivel_usado=organizacion.nivel_suscripcion,
-            total_preguntas=framework.contar_preguntas_activas_para_nivel(organizacion.nivel_suscripcion),
-            estado=EstadoEvaluacion.EN_PROGRESO
+            total_preguntas=cuestionario.total_items,
+            preguntas_completadas=0,
+            estado=EstadoEvaluacion.BORRADOR,
+            tiempo_estimado_minutos=cuestionario.tiempo_estimado_minutos
         )
         
         # Iniciar la evaluación
@@ -267,7 +302,6 @@ async def crear_nueva_evaluacion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al crear evaluación: {str(e)}"
         )
-
 
 @router.get("/acciones", response_model=List[AccionRapida])
 async def obtener_acciones_rapidas(
@@ -358,7 +392,6 @@ async def obtener_acciones_rapidas(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener acciones rápidas: {str(e)}"
         )
-
 
 @router.get("/estadisticas-uso")
 async def obtener_estadisticas_uso(

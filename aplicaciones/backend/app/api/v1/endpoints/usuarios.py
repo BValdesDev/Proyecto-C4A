@@ -26,7 +26,6 @@ from ..dependencias import (
 
 router = APIRouter()
 
-
 # Modelos Pydantic
 class UsuarioCreateRequest(BaseModel):
     email: EmailStr
@@ -35,7 +34,6 @@ class UsuarioCreateRequest(BaseModel):
     password: str
     rol_id: str
 
-
 class UsuarioUpdateRequest(BaseModel):
     nombres: Optional[str] = None
     apellidos: Optional[str] = None
@@ -43,7 +41,6 @@ class UsuarioUpdateRequest(BaseModel):
     zona_horaria: Optional[str] = None
     notificaciones_email: Optional[bool] = None
     notificaciones_push: Optional[bool] = None
-
 
 class UsuarioResponse(BaseModel):
     id: str
@@ -56,13 +53,11 @@ class UsuarioResponse(BaseModel):
     fecha_creacion: datetime
     rol: dict
 
-
 class UsuarioListResponse(BaseModel):
     usuarios: List[UsuarioResponse]
     total: int
     pagina: int
     por_pagina: int
-
 
 # Endpoints
 @router.post("/registrar", response_model=UsuarioResponse)
@@ -155,7 +150,6 @@ async def registrar_usuario(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/", response_model=UsuarioListResponse)
 async def listar_usuarios(
     pagina: int = 1,
@@ -210,7 +204,6 @@ async def listar_usuarios(
             detail="Error interno del servidor"
         )
 
-
 @router.get("/{usuario_id}", response_model=UsuarioResponse)
 async def obtener_usuario(
     usuario_id: str,
@@ -252,7 +245,6 @@ async def obtener_usuario(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.put("/{usuario_id}", response_model=UsuarioResponse)
 async def actualizar_usuario(
@@ -325,7 +317,6 @@ async def actualizar_usuario(
             detail="Error interno del servidor"
         )
 
-
 @router.delete("/{usuario_id}")
 async def eliminar_usuario(
     usuario_id: str,
@@ -372,7 +363,6 @@ async def eliminar_usuario(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor"
         )
-
 
 @router.get("/{usuario_id}/estadisticas")
 async def obtener_estadisticas_usuario(

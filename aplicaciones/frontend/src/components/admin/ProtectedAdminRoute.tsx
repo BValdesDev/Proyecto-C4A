@@ -10,13 +10,6 @@ const ProtectedAdminRoute: React.FC<ProtectedAdminRouteProps> = ({ children }) =
   const { usuario, loading, isAdmin } = useAuth();
   const location = useLocation();
 
-  console.log('🔍 Debug ProtectedAdminRoute:', {
-    usuario,
-    loading,
-    isAdmin: isAdmin(),
-    location: location.pathname
-  });
-
   // Mostrar loading mientras se verifica la autenticación
   if (loading) {
     return (
