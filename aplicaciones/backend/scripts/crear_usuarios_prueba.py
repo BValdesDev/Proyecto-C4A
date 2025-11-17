@@ -126,7 +126,7 @@ def crear_usuarios_basicos(db: Session):
         )
         
         db.add(usuario)
-        ")
+        print(f"✅ Usuario creado: {user_data['email']}")
     
     db.commit()
     
@@ -194,8 +194,8 @@ def crear_usuarios_completos(db: Session):
         if not org_existente:
             organizacion = Organizacion(**org_data)
             db.add(organizacion)
-            else:
-            db.commit()
+    
+    db.commit()
     
     # Crear usuarios adicionales
     usuarios_adicionales = [
@@ -252,7 +252,7 @@ def crear_usuarios_completos(db: Session):
         )
         
         db.add(usuario)
-        ")
+        print(f"✅ Usuario creado: {user_data['email']}")
     
     db.commit()
     

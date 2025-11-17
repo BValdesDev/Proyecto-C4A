@@ -3,7 +3,7 @@
 Endpoints para gestión de cuestionarios/diagnósticos
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -322,6 +322,79 @@ async def obtener_preguntas_cuestionario(
         ))
     
     return resultado
+
+@router.get("/nivel/{nivel_suscripcion}")
+async def obtener_preguntas_por_nivel(
+    nivel_suscripcion: str,
+    db: Session = Depends(obtener_sesion),
+    usuario_actual: Optional[Usuario] = Depends(obtener_usuario_opcional)
+):
+    """
+    Obtener preguntas según el nivel de suscripción
+    Mapea: gratuito -> basico, pro -> intermedio, empresarial -> avanzado
+    """
+    # Mapear nivel de suscripción a nivel de cuestionario
+    mapeo_niveles = {
+        "gratuito": NivelCuestionario.basico,
+        "pro": NivelCuestionario.intermedio,
+        "empresarial": NivelCuestionario.avanzado
+    }
+    
+    nivel_cuestionario = mapeo_niveles.get(nivel_suscripcion.lower())
+    if not nivel_cuestionario:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Nivel de suscripción inválido: {nivel_suscripcion}. Debe ser: gratuito, pro o empresarial"
+        )
+    
+    # Buscar el cuestionario activo para ese nivel
+    cuestionario = db.query(Cuestionario).filter(
+        Cuestionario.nivel == nivel_cuestionario,
+        Cuestionario.esta_activo == True,
+        Cuestionario.fecha_eliminacion.is_(None)
+    ).order_by(Cuestionario.fecha_creacion.desc()).first()
+    
+    if not cuestionario:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No hay cuestionarios disponibles para el nivel {nivel_suscripcion}"
+        )
+    
+    # Obtener todas las preguntas asignadas al cuestionario
+    preguntas_asignadas = db.query(CuestionarioPregunta).filter(
+        CuestionarioPregunta.cuestionario_id == cuestionario.id
+    ).order_by(
+        CuestionarioPregunta.orden_seccion,
+        CuestionarioPregunta.orden_pregunta
+    ).all()
+    
+    # Formatear respuesta
+    preguntas_formateadas = []
+    for pa in preguntas_asignadas:
+        pregunta_data = {
+            "id": str(pa.pregunta_id),
+            "codigo": pa.pregunta.codigo if pa.pregunta else "N/A",
+            "texto": pa.texto_final,
+            "texto_ayuda": pa.texto_ayuda_final,
+            "categoria": pa.pregunta.categoria if pa.pregunta else None,
+            "subcategoria": pa.pregunta.subcategoria if pa.pregunta else None,
+            "seccion": pa.seccion,
+            "tipo_seccion": pa.tipo_seccion.value,
+            "orden": pa.orden_pregunta,
+            "es_obligatoria": pa.es_obligatoria,
+            "peso": pa.peso_final,
+            "tipo_respuesta": pa.pregunta.tipo_respuesta if pa.pregunta else "likert_5"
+        }
+        preguntas_formateadas.append(pregunta_data)
+    
+    return {
+        "nivel_suscripcion": nivel_suscripcion,
+        "nivel_cuestionario": nivel_cuestionario.value,
+        "cuestionario_id": str(cuestionario.id),
+        "cuestionario_nombre": cuestionario.nombre,
+        "total_preguntas": len(preguntas_formateadas),
+        "preguntas": preguntas_formateadas
+    }
 
 # ============================================================================
 # ENDPOINTS - ADMINISTRACIÓN (Solo Admins)
