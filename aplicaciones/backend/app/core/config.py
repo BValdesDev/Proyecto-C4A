@@ -20,16 +20,16 @@ class ConfiguracionSeguridad(BaseSettings):
     """Configuración de seguridad y autenticación"""
     
     # Configuración general
-    entorno: str = "desarrollo"
-    debug: bool = True
+    entorno: str = "produccion"
+    debug: bool = False
     habilitar_security_middleware: bool = True
     
     # Configuración de email para notificaciones
-    email_user: str = "c4a.notifications@gmail.com"
-    email_password: str = "c4a_notifications_2024"
+    email_user: str = ""  # Requerido desde variable de entorno
+    email_password: str = ""  # Requerido desde variable de entorno
     
     # Base de datos
-    url_base_datos: str = "postgresql+asyncpg://c4a_user:c4a_password@localhost:5432/c4a_saas"
+    url_base_datos: str = ""  # Requerido desde variable de entorno
     ssl_requerido: bool = False
     
     # Redis
@@ -38,48 +38,13 @@ class ConfiguracionSeguridad(BaseSettings):
     
     # JWT y autenticación
     algoritmo_jwt: str = "RS256"
-    clave_publica_jwt: str = """-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz647gWvwfmIsqEYQqefy
-RTAtP8w7PceHuUQQti92NG/qLSeSg/EfacP6wT4//2qR3T0pIZn2JKgW+ezbQLbQ
-kJCDgcPdpb42Axu/MDmpnBJVkIzrxrEB76zx+5fcHB4UylUKGc7e6bs8qvdF90UT
-ynM1wPhuti5Z3x7fshPLxprpuqHLAV3vPlw56AFl6x30DwPPW47rvUaRyP6lGxVM
-9LJF1P6o53m544Hx714QktnYXA45GtYkH2E+0V6W3XnOlbtMoBcZRQEPwwT5zxip
-lt1xXJtcDy/lHZFgrPNOa0adnpu99x4VZR4JmHypOhNu9uKCESz6og1W+X/xb45Y
-mwIDAQAB
------END PUBLIC KEY-----"""
-    clave_privada_jwt: str = """-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDPrjuBa/B+Yiyo
-RhCp5/JFMC0/zDs9x4e5RBC2L3Y0b+otJ5KD8R9pw/rBPj//apHdPSkhmfYkqBb5
-7NtAttCQkIOBw92lvjYDG78wOamcElWQjOvGsQHvrPH7l9wcHhTKVQoZzt7puzyq
-90X3RRPKczXA+G62LlnfHt+yE8vGmum6ocsBXe8+XDnoAWXrHfQPA89bjuu9RpHI
-/qUbFUz0skXU/qjnebnjgfHvXhCS2dhcDjka1iQfYT7RXpbdec6Vu0ygFxlFAQ/D
-BPnPGKmW3XFcm1wPL+UdkWCs805rRp2em733HhVlHgmYfKk6E2724oIRLPqiDVb5
-f/FvjlibAgMBAAECggEABDmOgw3/uPXlCIgryVNY+krqrU6AhJcmUneW77puu2B/
-LLSy4bD3+Pvpb+o7xlgK3yurIcCAs7xX8HTsj3ytKMltiSgxPlUjebiR2i+DQZPm
-wv5lMKN/VhYTqUfROmoPrFrnO8WZp7rfcm8052F83V2uxnlnVE+Wppf5jNwRPD3S
-trCBd7IiIjZxqQvbJF78Lo8UhlDWEYSG8DXhcXIVdNM/1T5ezQFfy9YBa7SHas1T
-GiW2VZYrCEt1csfCsgdyH9vM5uFtNJrzwl4kbZDmBtHFyb3/qbiJtHRfBa7G/1SY
-4sJrXOoVURQfT6SA5C5drnobDkyyVRhBlpdoVXW65QKBgQDqn0QJkV10vvJzbkwT
-0IGT1W6W2XMmhqm5JLoM2OPcQlJPWjKNlB5SDkaDLNy3ljCi43wgjoFr1cP/bgMV
-vCXWZSDQN85ZQHfwTjx6dWKVJsA3FThZKNIhB3jmgEm/GIb6Vh9nBN1OIcvgtwzx
-PCTOBdzwtDtUvdR/IXjVd0yVPwKBgQDimokUh0yCRstbrLMMhdB1DON6ppPKI0hs
-CayOZy29/Mh8W63M9yC2wLXuc62cinXZVef1YQtYspSrfS9N0djQ3Si0+f1TXvyQ
-ncU0LUdkP29q883jF7QbC0lyMgW/lMVGR0LjqIBYtlnViRNWlw68UgR94LcZPOO3
-i7AjzKEZpQKBgQCwerwitkUl27tjOEPhY6UUHibhMQ98my5vJUENCNfchcaECcSc
-2h00e6huYwBi14YeAB8OHiMbid+z8nw/jRao/ciA1nlQiT2udCrpsgJFTrCmvj90
-UVA9p/E48KaIJ1rgUoesZexRKPrCPO5vRl4o2iAmrmsygtekCPlrGCFy4QKBgAYD
-Sb3ktTADxuOg2oNrjZN9iw+3GdbURtivDQgeTsVqzrsWB6+XoyOWS32PTj0II4Zn
-1Cbbs1xgKLfAM6AiAFnSdIEQ3Rr4O0VvGkt/JBTR5hf1bjInb90D2KgSEbr6rJ1n
-yKuXzggMlqem4n96tKZkmr/oVZNy3SwCpeLdTC0NAoGAfY1XnW68Z7nbo6UcE+3k
-999BVlXciKSbc4M+08Df+UMhZfRpvoFaosoxWBaiAgssMuysiZefLaAMuAbkmUbY
-Kl9FSvf+BHBYPteFpNSvHQivk1Sl7i6v00XKQGITCIvG3rFBjFuyGJCvBi8CF4+B
-Qn6caGISM5fcqWt4bvr6eh8=
------END PRIVATE KEY-----"""
+    clave_publica_jwt: str = ""  # Requerido desde variable de entorno
+    clave_privada_jwt: str = ""  # Requerido desde variable de entorno
     tiempo_expiracion_acceso: int = 15  # minutos
     tiempo_expiracion_refresco: int = 10080  # 7 días en minutos
     
     # Cifrado
-    clave_maestra_cifrado: str = "clave-maestra-desarrollo"
+    clave_maestra_cifrado: str = ""  # Requerido desde variable de entorno
     
     # Rate limiting por nivel
     limite_velocidad_gratuito: int = 100  # por hora
@@ -107,6 +72,9 @@ Qn6caGISM5fcqWt4bvr6eh8=
     usuario_smtp: str = ""
     contraseña_smtp: str = ""
     email_desde: str = "noreply@c4a.cl"
+    
+    # CORS
+    cors_origins: str = "https://c4a.cl,https://app.c4a.cl"
     
     # Configuración Chile
     pais_default: str = "CL"
@@ -142,15 +110,50 @@ Qn6caGISM5fcqWt4bvr6eh8=
     directorio_reportes: str = "reportes"
     max_tamaño_archivo: int = 10485760  # 10MB
     
-    # Desarrollo
-    saltar_verificacion_email: bool = True
-    saltar_webhooks_stripe: bool = True
-    simular_servicios_externos: bool = True
+    # Desarrollo (defaults seguros para producción)
+    saltar_verificacion_email: bool = False
+    saltar_webhooks_stripe: bool = False
+    simular_servicios_externos: bool = False
 
     model_config = {
         "env_file": ".env",
-        "case_sensitive": False
+        "case_sensitive": False,
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"  # Ignorar variables de entorno extra que no están en el modelo
     }
+    
+    def __init__(self, **kwargs):
+        """Inicializar configuración validando variables críticas"""
+        super().__init__(**kwargs)
+        
+        # Verificar si las claves JWT están en archivos si no están en variables de entorno
+        if not self.clave_publica_jwt or not self.clave_privada_jwt:
+            import os
+            pub_file = os.getenv("JWT_PUBLIC_KEY_FILE", "jwt_public.pem")
+            priv_file = os.getenv("JWT_PRIVATE_KEY_FILE", "jwt_private.pem")
+            
+            if os.path.exists(pub_file) and os.path.exists(priv_file):
+                try:
+                    with open(pub_file, 'r') as f:
+                        self.clave_publica_jwt = f.read()
+                    with open(priv_file, 'r') as f:
+                        self.clave_privada_jwt = f.read()
+                except Exception as e:
+                    print(f"Advertencia: No se pudieron cargar claves desde archivos: {e}")
+        
+        # Validar que las variables críticas estén configuradas
+        if not self.clave_publica_jwt or not self.clave_privada_jwt:
+            raise ValueError(
+                "CLAVE_PUBLICA_JWT y CLAVE_PRIVADA_JWT deben estar configuradas en variables de entorno o en archivos (jwt_public.pem, jwt_private.pem)"
+            )
+        if not self.url_base_datos:
+            raise ValueError(
+                "URL_BASE_DATOS debe estar configurada en variables de entorno"
+            )
+        if not self.clave_maestra_cifrado:
+            raise ValueError(
+                "CLAVE_MAESTRA_CIFRADO debe estar configurada en variables de entorno"
+            )
     
     @field_validator('url_base_datos')
     @classmethod

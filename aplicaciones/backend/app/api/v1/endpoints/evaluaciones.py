@@ -3,18 +3,14 @@
 Endpoints para gestionar evaluaciones completadas
 """
 
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
-from ....core.config import NivelSuscripcion
 from ....modelos import Evaluacion, Cuestionario, Usuario
-from ....modelos.organizacion import Organizacion
 from ....modelos.base import obtener_sesion
-from ..dependencias import obtener_usuario_actual_dependencia, obtener_usuario_opcional
-from app.core.rate_limiting import get_rate_limiter
+from ..dependencias import obtener_usuario_actual, obtener_usuario_opcional
 
 router = APIRouter()
 
@@ -47,35 +43,23 @@ async def listar_evaluaciones(
         
         # Obtener total de evaluaciones
         total = db.query(Evaluacion).filter(
-            Evaluacion.creado_por == usuario_actual.id,
-            Evaluacion.fecha_eliminacion.is_(None)
+            Evaluacion.creado_por == usuario_actual.id
         ).count()
         
         # Obtener evaluaciones con paginación
         evaluaciones = db.query(Evaluacion).filter(
-            Evaluacion.creado_por == usuario_actual.id,
-            Evaluacion.fecha_eliminacion.is_(None)
+            Evaluacion.creado_por == usuario_actual.id
         ).offset(offset).limit(por_pagina).all()
         
         return {
             "evaluaciones": [
                 {
-                    "id": str(evaluacion.id),
-                    "nombre": evaluacion.nombre,
-                    "estado": evaluacion.estado.value if hasattr(evaluacion.estado, "value") else evaluacion.estado,
-                    "fecha_creacion": evaluacion.fecha_creacion.isoformat() if evaluacion.fecha_creacion else None,
-                    "fecha_completada": evaluacion.fecha_completada.isoformat() if evaluacion.fecha_completada else None,
-                    "puntuacion_global": float(evaluacion.puntuacion_global) if evaluacion.puntuacion_global else None,
-                    "total_preguntas": evaluacion.total_preguntas,
-                    "preguntas_completadas": evaluacion.preguntas_completadas,
-                    "porcentaje_completado": evaluacion.porcentaje_completado,
-                    "nivel_usado": evaluacion.nivel_usado.value if evaluacion.nivel_usado else None,
-                    "framework": {
-                        "id": str(evaluacion.framework.id),
-                        "nombre": evaluacion.framework.nombre,
-                        "nombre_mostrar": evaluacion.framework.nombre_mostrar,
-                        "version": evaluacion.framework.version
-                    } if evaluacion.framework else None
+            "id": str(evaluacion.id),
+            "nombre": evaluacion.nombre,
+                    "estado": evaluacion.estado,
+                    "fecha_creacion": evaluacion.fecha_creacion,
+                    "fecha_completada": evaluacion.fecha_completada,
+                    "puntuacion_global": float(evaluacion.puntuacion_global) if evaluacion.puntuacion_global else None
                 }
                 for evaluacion in evaluaciones
             ],
@@ -173,61 +157,6 @@ async def obtener_evaluacion_por_id(
             detail=f"Error al obtener evaluación: {str(e)}"
         )
 
-@router.delete("/{evaluacion_id}")
-async def eliminar_evaluacion(
-    evaluacion_id: UUID,
-    usuario_actual: Usuario = Depends(obtener_usuario_actual_dependencia),
-    db: Session = Depends(obtener_sesion)
-):
-    """Eliminar una evaluación del Plan Pro mediante eliminación lógica"""
-    try:
-        # Verificar que la organización exista y tenga Plan Pro
-        organizacion = db.query(Organizacion).filter(
-            Organizacion.id == usuario_actual.organizacion_id,
-            Organizacion.fecha_eliminacion.is_(None)
-        ).first()
-
-        if not organizacion:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Organización no encontrada o inactiva"
-            )
-
-        if organizacion.nivel_suscripcion != NivelSuscripcion.PRO:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="La eliminación de evaluaciones está disponible solo para el Plan Pro"
-            )
-
-        # Buscar evaluación del usuario
-        evaluacion = db.query(Evaluacion).filter(
-            Evaluacion.id == evaluacion_id,
-            Evaluacion.creado_por == usuario_actual.id,
-            Evaluacion.fecha_eliminacion.is_(None)
-        ).first()
-
-        if not evaluacion:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Evaluación no encontrada"
-            )
-
-        evaluacion.fecha_eliminacion = datetime.utcnow()
-        db.commit()
-
-        return {
-            "mensaje": "Evaluación eliminada correctamente",
-            "evaluacion_id": str(evaluacion_id)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al eliminar evaluación: {str(e)}"
-        )
-
 @router.get("/completadas/{cuestionario_id}")
 async def verificar_evaluacion_completada(
     cuestionario_id: str,
@@ -271,7 +200,7 @@ async def guardar_evaluacion_completada(
     usuario_actual: Optional[Usuario] = Depends(obtener_usuario_opcional),
     db: Session = Depends(obtener_sesion)
 ):
-    """Guardar una evaluación completada y generar PDF automáticamente para Plan Empresarial"""
+    """Guardar una evaluación completada"""
     try:
         # Si no hay usuario autenticado, devolver error
         if not usuario_actual:
@@ -291,14 +220,6 @@ async def guardar_evaluacion_completada(
                 detail="Cuestionario no encontrado"
             )
         
-        # Obtener nivel de suscripción del usuario
-        from ....modelos.organizacion import Organizacion
-        organizacion = db.query(Organizacion).filter(
-            Organizacion.id == usuario_actual.organizacion_id
-        ).first()
-        
-        nivel_suscripcion = organizacion.nivel_suscripcion.value if organizacion else "gratuito"
-        
         # Verificar si ya existe una evaluación completada
         evaluacion_existente = db.query(Evaluacion).filter(
             Evaluacion.cuestionario_id == cuestionario_id,
@@ -314,66 +235,8 @@ async def guardar_evaluacion_completada(
             evaluacion_existente.tiempo_real_minutos = resultado.get("tiempo_real_minutos", 0)
             
             db.commit()
-            
-            # Generar PDF automáticamente para Plan Empresarial
-            evaluacion_id = str(evaluacion_existente.id)
-            if nivel_suscripcion == "empresarial":
-                try:
-                    from ....servicios.pdf_profesional_service import PDFProfesionalService
-                    from datetime import datetime
-                    
-                    pdf_service = PDFProfesionalService()
-                    usuario_data = {
-                        'nombre': f"{usuario_actual.nombres} {usuario_actual.apellidos}",
-                        'email': usuario_actual.email,
-                        'organizacion': organizacion.nombre if organizacion else 'Organización no encontrada'
-                    }
-                    
-                    datos_pdf = {
-                        'nombre': evaluacion_existente.nombre,
-                        'puntuacion_global': float(evaluacion_existente.puntuacion_global) if evaluacion_existente.puntuacion_global else 0,
-                        'puntuaciones_dominio': evaluacion_existente.puntuaciones_dominio or {},
-                        'tiempo_real_minutos': evaluacion_existente.tiempo_real_minutos or 0,
-                        'total_preguntas': evaluacion_existente.total_preguntas,
-                        'preguntas_completadas': evaluacion_existente.preguntas_completadas,
-                        'cuestionario_nombre': cuestionario.nombre,
-                        'nivel': nivel_suscripcion,
-                        'descripcion': 'Evaluación de madurez en ciberseguridad - Plan Empresarial',
-                        'fecha_inicio': evaluacion_existente.fecha_inicio.isoformat() if evaluacion_existente.fecha_inicio else datetime.now().isoformat(),
-                        'fecha_completada': evaluacion_existente.fecha_completada.isoformat() if evaluacion_existente.fecha_completada else datetime.now().isoformat()
-                    }
-                    
-                    pdf_content = pdf_service.generar_informe_profesional(datos_pdf, usuario_data)
-                    
-                    # Guardar PDF en el sistema de reportes (opcional)
-                    # Por ahora solo se genera, se puede descargar después desde el endpoint específico
-                    
-                except Exception as pdf_error:
-                    # No fallar la operación si hay error en PDF, solo loguear
-                    print(f"Error generando PDF automático: {pdf_error}")
-            
-            return {"mensaje": "Evaluación actualizada exitosamente", "evaluacion_id": evaluacion_id}
+            return {"mensaje": "Evaluación actualizada exitosamente", "evaluacion_id": str(evaluacion_existente.id)}
         else:
-            rate_limiter = get_rate_limiter()
-            limite_evaluaciones = rate_limiter.check_evaluation_limit(
-                str(usuario_actual.organizacion_id),
-                nivel_suscripcion
-            )
-
-            if not limite_evaluaciones["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Límite mensual de evaluaciones alcanzado para tu suscripción",
-                    headers={
-                        "Retry-After": "2592000",
-                        "X-RateLimit-Limit-Month": str(limite_evaluaciones["limit"]),
-                        "X-RateLimit-Remaining-Month": str(
-                            max(limite_evaluaciones["limit"] - limite_evaluaciones["current_evaluations"], 0)
-                        ),
-                        "X-RateLimit-Period": limite_evaluaciones["period"]
-                    }
-                )
-
             # Crear nueva evaluación
             from datetime import datetime
             import uuid
@@ -385,7 +248,7 @@ async def guardar_evaluacion_completada(
                 framework_id=cuestionario.framework_id,
                 cuestionario_id=cuestionario_id,
                 creado_por=usuario_actual.id,
-                nivel_usado=nivel_suscripcion,
+                nivel_usado="gratuito",  # TODO: Obtener del usuario real
                 total_preguntas=cuestionario.total_items,
                 preguntas_completadas=cuestionario.total_items,
                 estado="completada",
@@ -401,44 +264,7 @@ async def guardar_evaluacion_completada(
             db.commit()
             db.refresh(nueva_evaluacion)
             
-            evaluacion_id = str(nueva_evaluacion.id)
-            
-            # Generar PDF automáticamente para Plan Empresarial
-            if nivel_suscripcion == "empresarial":
-                try:
-                    from ....servicios.pdf_profesional_service import PDFProfesionalService
-                    
-                    pdf_service = PDFProfesionalService()
-                    usuario_data = {
-                        'nombre': f"{usuario_actual.nombres} {usuario_actual.apellidos}",
-                        'email': usuario_actual.email,
-                        'organizacion': organizacion.nombre if organizacion else 'Organización no encontrada'
-                    }
-                    
-                    datos_pdf = {
-                        'nombre': nueva_evaluacion.nombre,
-                        'puntuacion_global': float(nueva_evaluacion.puntuacion_global) if nueva_evaluacion.puntuacion_global else 0,
-                        'puntuaciones_dominio': nueva_evaluacion.puntuaciones_dominio or {},
-                        'tiempo_real_minutos': nueva_evaluacion.tiempo_real_minutos or 0,
-                        'total_preguntas': nueva_evaluacion.total_preguntas,
-                        'preguntas_completadas': nueva_evaluacion.preguntas_completadas,
-                        'cuestionario_nombre': cuestionario.nombre,
-                        'nivel': nivel_suscripcion,
-                        'descripcion': 'Evaluación de madurez en ciberseguridad - Plan Empresarial',
-                        'fecha_inicio': nueva_evaluacion.fecha_inicio.isoformat() if nueva_evaluacion.fecha_inicio else datetime.now().isoformat(),
-                        'fecha_completada': nueva_evaluacion.fecha_completada.isoformat() if nueva_evaluacion.fecha_completada else datetime.now().isoformat()
-                    }
-                    
-                    pdf_content = pdf_service.generar_informe_profesional(datos_pdf, usuario_data)
-                    
-                    # Guardar PDF en el sistema de reportes (opcional)
-                    # Por ahora solo se genera, se puede descargar después desde el endpoint específico
-                    
-                except Exception as pdf_error:
-                    # No fallar la operación si hay error en PDF, solo loguear
-                    print(f"Error generando PDF automático: {pdf_error}")
-            
-            return {"mensaje": "Evaluación guardada exitosamente", "evaluacion_id": evaluacion_id}
+            return {"mensaje": "Evaluación guardada exitosamente", "evaluacion_id": str(nueva_evaluacion.id)}
             
     except Exception as e:
         db.rollback()

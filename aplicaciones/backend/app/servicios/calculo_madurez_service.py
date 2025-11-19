@@ -4,6 +4,7 @@ Servicio para cálculo de madurez y generación de resultados de diagnósticos
 """
 
 from typing import Dict, List, Tuple, Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..modelos.evaluacion import Evaluacion
 from ..modelos.respuesta import Respuesta
@@ -237,16 +238,26 @@ class CalculoMadurezService:
         
         con_evidencia = sum(1 for r in respuestas if r.texto_evidencia and r.texto_evidencia.strip())
         con_comentarios = sum(1 for r in respuestas if r.comentarios and r.comentarios.strip())
-        confianzas = [r.nivel_confianza for r in respuestas if r.nivel_confianza]
+
+        respuestas_con_confianza = [
+            r.id for r in respuestas if r.nivel_confianza is not None
+        ]
+        confianza_promedio = 0.0
+        if respuestas_con_confianza:
+            confianza_promedio = self.db.query(
+                func.avg(Respuesta.nivel_confianza)
+            ).filter(
+                Respuesta.id.in_(respuestas_con_confianza)
+            ).scalar() or 0.0
         
         return {
             "porcentaje_con_evidencia": round((con_evidencia / total) * 100, 1),
             "porcentaje_con_comentarios": round((con_comentarios / total) * 100, 1),
-            "confianza_promedio": round(sum(confianzas) / len(confianzas), 1) if confianzas else 0,
+            "confianza_promedio": round(confianza_promedio, 1) if respuestas_con_confianza else 0,
             "calidad_general": round(
                 ((con_evidencia / total) * 40 + 
                  (con_comentarios / total) * 30 + 
-                 (sum(confianzas) / len(confianzas) / 5 if confianzas else 0) * 30),
+                 ((confianza_promedio / 5) if respuestas_con_confianza else 0) * 30),
                 1
             )
         }

@@ -125,6 +125,12 @@ ENV/
 env.bak/
 venv.bak/
 
+# Claves RSA y certificados
+jwt_*.pem
+*.pem
+*.key
+*.cert
+
 # FastAPI
 .pytest_cache/
 .coverage

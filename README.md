@@ -2,6 +2,13 @@
 
 Plataforma SaaS de evaluación de ciberseguridad para PyMEs chilenas basada en frameworks internacionales (NIST, COBIT, ISO).
 
+## 🔒 Estado de Seguridad y CI/CD
+
+[![Security Pipeline](https://github.com/cherrera0001/c4a-autodiagnostico/workflows/Security%20Pipeline/badge.svg)](https://github.com/cherrera0001/c4a-autodiagnostico/actions/workflows/security-pipeline.yml)
+[![CI Pipeline](https://github.com/cherrera0001/c4a-autodiagnostico/workflows/CI%20Pipeline/badge.svg)](https://github.com/cherrera0001/c4a-autodiagnostico/actions/workflows/ci.yml)
+[![Security](https://github.com/cherrera0001/c4a-autodiagnostico/workflows/Security%20Pipeline/badge.svg?branch=main)](https://github.com/cherrera0001/c4a-autodiagnostico/actions/workflows/security-pipeline.yml)
+[![CodeQL](https://github.com/cherrera0001/c4a-autodiagnostico/workflows/Security%20Pipeline/badge.svg)](https://github.com/cherrera0001/c4a-autodiagnostico/security/code-scanning)
+
 ## 📋 Tabla de Contenidos
 
 - [Características](#características)
@@ -93,9 +100,41 @@ source venv/bin/activate  # En Windows: venv\Scripts\activate
 # Instalar dependencias
 pip install -r requirements.txt
 
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus credenciales
+# Configurar entorno local (automático)
+# Linux/Mac:
+chmod +x scripts/setup-env.sh
+./scripts/setup-env.sh
+
+# Windows:
+.\scripts\setup-env.ps1
+
+# O manualmente:
+# 1. Copiar env.example a .env
+cp env.example .env
+
+# 2. Generar claves RSA para JWT
+python scripts/generar_claves_rsa.py
+# O con openssl:
+openssl genrsa -out jwt_private.pem 2048
+openssl rsa -in jwt_private.pem -pubout -out jwt_public.pem
+
+# 3. Convertir claves a formato de una línea para .env
+awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' jwt_public.pem
+awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' jwt_private.pem
+
+# 4. Generar clave maestra de cifrado
+openssl rand -hex 32
+
+# 5. Editar .env con tus credenciales:
+#    - URL_BASE_DATOS (PostgreSQL)
+#    - CLAVE_PUBLICA_JWT y CLAVE_PRIVADA_JWT (claves generadas)
+#    - CLAVE_MAESTRA_CIFRADO (clave generada)
+#    - EMAIL_USER y EMAIL_PASSWORD
+#    - STRIPE_CLAVE_PUBLICA y STRIPE_CLAVE_SECRETA
+
+# 6. Validar configuración
+python scripts/validate-no-secrets.py
+python -c "from app.core.config import config; print('✅ Configuración válida')"
 
 # Ejecutar migraciones
 alembic upgrade head
@@ -103,6 +142,8 @@ alembic upgrade head
 # Iniciar servidor
 uvicorn app.main:app --reload
 ```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+grep
 
 #### Frontend
 

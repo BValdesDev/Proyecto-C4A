@@ -77,9 +77,22 @@ if not config.debug:
 # )
 
 # Usar middleware CORS estándar de FastAPI
+# Cargar orígenes permitidos desde variable de entorno
+cors_origins_list = []
+if config.debug:
+    # En desarrollo, permitir localhost
+    cors_origins_list = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
+else:
+    # En producción, usar orígenes desde variable de entorno
+    if config.cors_origins:
+        cors_origins_list = [origin.strip() for origin in config.cors_origins.split(",")]
+    else:
+        # Fallback seguro si no está configurado
+        cors_origins_list = ["https://c4a.cl", "https://app.c4a.cl"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if config.debug else ["https://c4a.cl", "https://app.c4a.cl"],
+    allow_origins=cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

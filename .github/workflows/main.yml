@@ -1,0 +1,77 @@
+name: CI Backend FastAPI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'aplicaciones/backend/**'
+      - '.github/workflows/main.yml'
+
+jobs:
+  linting:
+    name: Linting (Black y Flake8)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependencias de calidad
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install black==23.11.0 flake8==6.1.0
+      
+      - name: Ejecutar Black (verificación)
+        working-directory: aplicaciones/backend
+        run: |
+          black --check --diff .
+      
+      - name: Ejecutar Flake8
+        working-directory: aplicaciones/backend
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+  tests:
+    name: Pruebas Unitarias (Pytest)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependencias
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Ejecutar Pytest
+        working-directory: aplicaciones/backend
+        run: |
+          pytest -v --tb=short
+        env:
+          # Configurar PYTHONPATH para que pytest pueda encontrar el módulo 'app'
+          PYTHONPATH: ${{ github.workspace }}/aplicaciones/backend
+          # Variables de entorno para pruebas (valores de prueba)
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: test-secret-key-for-ci
+          JWT_ALGORITHM: HS256
+          ENVIRONMENT: test
+
