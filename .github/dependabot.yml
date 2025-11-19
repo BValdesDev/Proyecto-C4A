@@ -1,0 +1,123 @@
+version: 2
+updates:
+  # Actualizar dependencias de Python (backend)
+  - package-ecosystem: "pip"
+    directory: "/aplicaciones/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "security-team"
+    labels:
+      - "dependencies"
+      - "python"
+      - "backend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      # Ignorar actualizaciones mayores que requieren migración manual
+      - dependency-name: "fastapi"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "sqlalchemy"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pydantic"
+        update-types: ["version-update:semver-major"]
+    groups:
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "security"
+
+  # Actualizar dependencias de npm (frontend)
+  - package-ecosystem: "npm"
+    directory: "/aplicaciones/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "security-team"
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "typescript"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      # Ignorar actualizaciones mayores que requieren migración manual
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+    groups:
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "security"
+
+  # Actualizar dependencias de Docker (si hay Dockerfiles)
+  - package-ecosystem: "docker"
+    directory: "/aplicaciones/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "security-team"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "backend"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/aplicaciones/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "security-team"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "frontend"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+
+  # Actualizar dependencias de GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "security-team"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "ci/cd"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+
+
+
+

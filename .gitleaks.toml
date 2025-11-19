@@ -1,0 +1,170 @@
+title = "C4A Custom Gitleaks Configuration"
+description = "Configuración personalizada de Gitleaks para detectar credenciales y secretos específicos del proyecto C4A"
+
+[[rules]]
+id = "c4a-token"
+description = "Detecta tokens específicos de C4A con patrón c4a_*"
+regex = '''(?i)(c4a_[a-zA-Z0-9_]{20,})'''
+tags = ["c4a", "token", "secret"]
+entropy = 3.5
+secretGroup = 1
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''\.gitleaks\.toml'''
+]
+
+[[rules]]
+id = "c4a-rsa-keys"
+description = "Detecta claves RSA específicas de C4A"
+regex = '''-----BEGIN (RSA )?PRIVATE KEY-----(?s).*?-----END (RSA )?PRIVATE KEY-----'''
+tags = ["c4a", "rsa", "private-key"]
+entropy = 7.0
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''scripts/.*'''
+]
+
+[[rules]]
+id = "c4a-postgresql-credentials"
+description = "Detecta credenciales PostgreSQL específicas de C4A"
+regex = '''(?i)(postgresql\+?asyncpg?://[a-zA-Z0-9_]+:[a-zA-Z0-9@!#$%&*()_+\-=\[\]{};':"\\|,.<>\/?]+@[^\s]+)'''
+tags = ["c4a", "postgresql", "database", "credentials"]
+entropy = 4.0
+secretGroup = 1
+allowlist.paths = [
+  '''\.env\.example''',
+  '''docker-compose\.yml''',
+  '''\.github/workflows/.*'''
+]
+
+[[rules]]
+id = "c4a-jwt-secrets"
+description = "Detecta secretos JWT hardcodeados de C4A"
+regex = '''(?i)((JWT|jwt)[_-]?(SECRET|secret|PRIVATE|private|PUBLIC|public)[_-]?KEY[=:]\s*["']?[a-zA-Z0-9_\-=+/]{32,}["']?)'''
+tags = ["c4a", "jwt", "secret"]
+entropy = 4.5
+secretGroup = 2
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "c4a-encryption-keys"
+description = "Detecta claves de cifrado maestras hardcodeadas"
+regex = '''(?i)((CLAVE|clave|KEY|key)[_-]?(MAESTRA|maestra|MASTER|master|CIFRADO|cifrado|ENCRYPTION|encryption)[=:]\s*["']?[a-zA-Z0-9_\-=+/]{32,}["']?)'''
+tags = ["c4a", "encryption", "key"]
+entropy = 5.0
+secretGroup = 2
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "c4a-stripe-keys"
+description = "Detecta claves de Stripe hardcodeadas (no en .env.example)"
+regex = '''(sk_live_[a-zA-Z0-9]{24,}|sk_test_[a-zA-Z0-9]{24,}|pk_live_[a-zA-Z0-9]{24,})'''
+tags = ["c4a", "stripe", "api-key", "payment"]
+entropy = 4.0
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "c4a-email-credentials"
+description = "Detecta credenciales de email hardcodeadas"
+regex = '''(?i)((EMAIL|email)[_-]?(PASSWORD|password|PASS|pass|USERNAME|username|USER|user)[=:]\s*["']?[a-zA-Z0-9_\-@!#$%&*()+=/]{8,}["']?)'''
+tags = ["c4a", "email", "credentials"]
+entropy = 3.5
+secretGroup = 2
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "c4a-redis-url"
+description = "Detecta URLs de Redis con credenciales"
+regex = '''(?i)(redis[s]?://[a-zA-Z0-9_]+:[a-zA-Z0-9@!#$%&*()_+\-=\[\]{};':"\\|,.<>\/?]+@[^\s]+)'''
+tags = ["c4a", "redis", "credentials"]
+entropy = 4.0
+secretGroup = 1
+allowlist.paths = [
+  '''\.env\.example''',
+  '''docker-compose\.yml''',
+  '''\.github/workflows/.*'''
+]
+
+[[rules]]
+id = "generic-api-keys"
+description = "Detecta claves API genéricas"
+regex = '''(?i)(api[_-]?key[=:]\s*["']?[a-zA-Z0-9_\-]{20,}["']?|apikey[=:]\s*["']?[a-zA-Z0-9_\-]{20,}["']?)'''
+tags = ["api-key", "secret"]
+entropy = 3.5
+secretGroup = 2
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md''',
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "aws-credentials"
+description = "Detecta credenciales de AWS"
+regex = '''(AKIA[0-9A-Z]{16}|aws_access_key_id|aws_secret_access_key)'''
+tags = ["aws", "credentials"]
+entropy = 3.0
+secretGroup = 1
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md'''
+]
+
+[[rules]]
+id = "github-tokens"
+description = "Detecta tokens de GitHub (excepto GITHUB_TOKEN que es estándar en Actions)"
+regex = '''(ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|ghu_[a-zA-Z0-9]{36}|ghs_[a-zA-Z0-9]{36}|ghr_[a-zA-Z0-9]{76})'''
+tags = ["github", "token"]
+entropy = 4.0
+allowlist.paths = [
+  '''\.env\.example''',
+  '''SECURITY\.md'''
+]
+
+[allowlist]
+description = "Archivos y directorios que se pueden excluir"
+paths = [
+  '''^\.git/.*''',
+  '''^node_modules/.*''',
+  '''^__pycache__/.*''',
+  '''^\.pytest_cache/.*''',
+  '''^dist/.*''',
+  '''^build/.*''',
+  '''^\.venv/.*''',
+  '''^venv/.*''',
+  '''^\.env\.example$''',
+  '''^SECURITY\.md$''',
+  '''^\.gitleaks\.toml$''',
+  '''^LICENSE$''',
+  '''^\.gitignore$''',
+  '''^README\.md$''',
+  '''^CHANGELOG\.md$''',
+  '''^package-lock\.json$''',
+  '''^yarn\.lock$''',
+  '''^poetry\.lock$'''
+]
+commits = [
+  '''^[a-f0-9]{40}$'''
+]
+regexes = [
+  '''example|test|sample|placeholder|dummy|fake'''
+]
+

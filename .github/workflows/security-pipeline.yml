@@ -1,0 +1,331 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  schedule:
+    # Ejecutar análisis semanal los lunes a las 2:00 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  secrets-scan:
+    name: Secrets Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ejecutar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-path: .gitleaks.toml
+          report-format: sarif
+          report-path: gitleaks-report.sarif
+          exit-code: 0
+          no-git: false
+
+      - name: Subir resultados SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks-report.sarif
+          category: gitleaks
+
+      - name: Verificar si hay secretos
+        run: |
+          if [ -f gitleaks-report.sarif ]; then
+            if grep -q '"level":"error"' gitleaks-report.sarif; then
+              echo "❌ Se detectaron secretos en el código"
+              exit 1
+            fi
+          fi
+
+  python-security:
+    name: Python Security Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+      fail-fast: false
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: Ejecutar Bandit (Análisis de seguridad)
+        working-directory: aplicaciones/backend
+        run: |
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -ll
+
+      - name: Verificar vulnerabilidades críticas/altas en Bandit
+        working-directory: aplicaciones/backend
+        run: |
+          if [ -f bandit-report.json ]; then
+            CRITICAL=$(python -c "import json; data=json.load(open('bandit-report.json')); print(sum(1 for issue in data['results'] if issue['issue_severity'] == 'HIGH' or issue['issue_confidence'] == 'HIGH'))" 2>/dev/null || echo "0")
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ Se encontraron $CRITICAL vulnerabilidades críticas/altas en Bandit"
+              exit 1
+            fi
+          fi
+
+      - name: Ejecutar Safety Check (Vulnerabilidades en dependencias)
+        working-directory: aplicaciones/backend
+        continue-on-error: true
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Verificar vulnerabilidades críticas/altas en Safety
+        working-directory: aplicaciones/backend
+        run: |
+          if [ -f safety-report.json ]; then
+            CRITICAL=$(python -c "import json; data=json.load(open('safety-report.json')); print(sum(1 for vuln in data if vuln.get('severity') in ['critical', 'high']))" 2>/dev/null || echo "0")
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ Se encontraron $CRITICAL vulnerabilidades críticas/altas en dependencias"
+              exit 1
+            fi
+          fi
+
+      - name: Subir artefactos de seguridad
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-security-reports-${{ matrix.python-version }}
+          path: |
+            aplicaciones/backend/bandit-report.json
+            aplicaciones/backend/safety-report.json
+          retention-days: 30
+
+  frontend-security:
+    name: Frontend Security Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20']
+      fail-fast: false
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: aplicaciones/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/frontend
+        run: npm ci
+
+      - name: Instalar eslint-plugin-security
+        working-directory: aplicaciones/frontend
+        run: |
+          npm install --save-dev eslint-plugin-security || true
+
+      - name: Ejecutar npm audit
+        working-directory: aplicaciones/frontend
+        continue-on-error: true
+        run: |
+          npm audit --audit-level=moderate --json > npm-audit-report.json || true
+          npm audit --audit-level=moderate
+
+      - name: Verificar vulnerabilidades críticas/altas en npm audit
+        working-directory: aplicaciones/frontend
+        run: |
+          if [ -f npm-audit-report.json ]; then
+            CRITICAL=$(node -e "const data=require('./npm-audit-report.json'); const vulns=data.vulnerabilities||{}; const count=Object.values(vulns).filter(v=>v.severity==='critical'||v.severity==='high').length; console.log(count);" 2>/dev/null || echo "0")
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ Se encontraron $CRITICAL vulnerabilidades críticas/altas en dependencias npm"
+              exit 1
+            fi
+          fi
+
+      - name: Ejecutar ESLint Security Plugin
+        working-directory: aplicaciones/frontend
+        continue-on-error: true
+        run: |
+          if npm list eslint-plugin-security > /dev/null 2>&1; then
+            npx eslint --ext .ts,.tsx --format json --output-file eslint-security-report.json src/ --plugin security || true
+            npx eslint --ext .ts,.tsx src/ --plugin security || true
+          else
+            echo "eslint-plugin-security no está instalado, omitiendo..."
+          fi
+
+      - name: Subir artefactos de seguridad
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-security-reports-${{ matrix.node-version }}
+          path: |
+            aplicaciones/frontend/npm-audit-report.json
+            aplicaciones/frontend/eslint-security-report.json
+          retention-days: 30
+
+  sast-analysis:
+    name: SAST Analysis (Semgrep)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Ejecutar Semgrep con reglas OWASP
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/security-audit
+            p/python
+            p/typescript
+            p/javascript
+          generateSarif: "1"
+          generateGitlabSAST: "1"
+          generateCodeClimate: "1"
+          generateTextOutput: "1"
+
+      - name: Subir resultados SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-owasp
+
+      - name: Verificar vulnerabilidades críticas/altas
+        run: |
+          if [ -f semgrep.sarif ]; then
+            CRITICAL=$(jq '[.runs[].results[] | select(.level == "error")] | length' semgrep.sarif 2>/dev/null || echo "0")
+            if [ "$CRITICAL" != "0" ] && [ "$CRITICAL" != "null" ]; then
+              echo "❌ Se encontraron $CRITICAL vulnerabilidades críticas en Semgrep"
+              exit 1
+            fi
+          fi
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Ejecutar OWASP Dependency Check (Backend)
+        uses: dependency-check/Dependency-Check_Action@main
+        id: depcheck-backend
+        with:
+          project: 'C4A-Backend'
+          path: './aplicaciones/backend'
+          format: 'SARIF'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+            --suppression ./scripts/owasp-suppressions.xml
+        continue-on-error: true
+
+      - name: Ejecutar OWASP Dependency Check (Frontend)
+        uses: dependency-check/Dependency-Check_Action@main
+        id: depcheck-frontend
+        with:
+          project: 'C4A-Frontend'
+          path: './aplicaciones/frontend'
+          format: 'SARIF'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+            --suppression ./scripts/owasp-suppressions.xml
+        continue-on-error: true
+
+      - name: Subir resultados SARIF Backend
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/C4A-Backend.sarif
+          category: owasp-dependency-check-backend
+
+      - name: Subir resultados SARIF Frontend
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/C4A-Frontend.sarif
+          category: owasp-dependency-check-frontend
+
+      - name: Verificar resultados
+        run: |
+          if [ "${{ steps.depcheck-backend.outcome }}" == "failure" ] || [ "${{ steps.depcheck-frontend.outcome }}" == "failure" ]; then
+            echo "❌ OWASP Dependency Check encontró vulnerabilidades críticas (CVSS >= 7)"
+            exit 1
+          fi
+
+  config-validation:
+    name: Config Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Dar permisos al script
+        run: chmod +x scripts/security-checks.sh
+
+      - name: Ejecutar validación de configuración
+        run: ./scripts/security-checks.sh
+        continue-on-error: false
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, python-security, frontend-security, sast-analysis, dependency-check, config-validation]
+    if: always()
+
+    steps:
+      - name: Resumen de seguridad
+        run: |
+          echo "## 🔒 Resumen del Pipeline de Seguridad" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets Scan | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python Security | ${{ needs.python-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Security | ${{ needs.frontend-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST Analysis | ${{ needs.sast-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Check | ${{ needs.dependency-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Config Validation | ${{ needs.config-validation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.secrets-scan.result }}" != "success" ] || \
+             [ "${{ needs.python-security.result }}" != "success" ] || \
+             [ "${{ needs.frontend-security.result }}" != "success" ] || \
+             [ "${{ needs.sast-analysis.result }}" != "success" ] || \
+             [ "${{ needs.dependency-check.result }}" != "success" ] || \
+             [ "${{ needs.config-validation.result }}" != "success" ]; then
+            echo "⚠️ **Algunos checks de seguridad fallaron. Por favor, revisa los reportes.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ **Todos los checks de seguridad pasaron correctamente.**" >> $GITHUB_STEP_SUMMARY
+          fi
+

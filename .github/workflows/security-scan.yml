@@ -1,0 +1,242 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  schedule:
+    # Ejecutar análisis semanal los lunes a las 2:00 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    name: Secrets Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ejecutar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-path: .gitleaks.toml
+          report-format: sarif
+          report-path: gitleaks-report.sarif
+          exit-code: 0
+          no-git: false
+
+      - name: Subir resultados SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks-report.sarif
+          category: gitleaks
+
+      - name: Verificar si hay secretos
+        run: |
+          if [ -f gitleaks-report.sarif ]; then
+            if grep -q '"level":"error"' gitleaks-report.sarif; then
+              echo "❌ Se detectaron secretos en el código"
+              exit 1
+            fi
+          fi
+          echo "✅ No se detectaron secretos"
+
+  bandit:
+    name: Python Security (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml]
+
+      - name: Ejecutar Bandit
+        working-directory: aplicaciones/backend
+        run: |
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -f txt
+
+      - name: Subir resultados Bandit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: aplicaciones/backend/bandit-report.json
+
+      - name: Verificar resultados
+        working-directory: aplicaciones/backend
+        run: |
+          if [ -f bandit-report.json ]; then
+            HIGH_SEVERITY=$(python -c "import json; data=json.load(open('bandit-report.json')); print(sum(1 for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'))")
+            if [ "$HIGH_SEVERITY" -gt 0 ]; then
+              echo "❌ Se encontraron $HIGH_SEVERITY vulnerabilidades de severidad HIGH"
+              exit 1
+            fi
+          fi
+          echo "✅ Bandit scan completado"
+
+  safety:
+    name: Python Dependencies (Safety)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar Safety
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety
+
+      - name: Ejecutar Safety Check
+        working-directory: aplicaciones/backend
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Subir resultados Safety
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-report
+          path: aplicaciones/backend/safety-report.json
+
+      - name: Verificar vulnerabilidades
+        working-directory: aplicaciones/backend
+        run: |
+          if [ -f safety-report.json ]; then
+            VULNS=$(python -c "import json; data=json.load(open('safety-report.json')); print(len(data.get('vulnerabilities', [])))")
+            if [ "$VULNS" -gt 0 ]; then
+              echo "❌ Se encontraron $VULNS vulnerabilidades en dependencias"
+              exit 1
+            fi
+          fi
+          echo "✅ Safety check completado"
+
+  npm-audit:
+    name: Frontend Dependencies (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: aplicaciones/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/frontend
+        run: npm ci
+
+      - name: Ejecutar npm audit
+        working-directory: aplicaciones/frontend
+        run: |
+          npm audit --json > npm-audit-report.json || true
+          npm audit
+
+      - name: Subir resultados npm audit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-report
+          path: aplicaciones/frontend/npm-audit-report.json
+
+      - name: Verificar vulnerabilidades críticas
+        working-directory: aplicaciones/frontend
+        run: |
+          if [ -f npm-audit-report.json ]; then
+            CRITICAL=$(python -c "import json; data=json.load(open('npm-audit-report.json')); print(data.get('metadata', {}).get('vulnerabilities', {}).get('critical', 0))")
+            HIGH=$(python -c "import json; data=json.load(open('npm-audit-report.json')); print(data.get('metadata', {}).get('vulnerabilities', {}).get('high', 0))")
+            if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+              echo "❌ Se encontraron vulnerabilidades críticas o altas: Critical=$CRITICAL, High=$HIGH"
+              exit 1
+            fi
+          fi
+          echo "✅ npm audit completado"
+
+  validate-no-secrets:
+    name: Validate No Hardcoded Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar validación de secretos
+        working-directory: aplicaciones/backend
+        run: |
+          python scripts/validate-no-secrets.py
+
+      - name: Verificar que config.py no tiene valores hardcodeados
+        working-directory: aplicaciones/backend
+        run: |
+          # Verificar que no hay claves RSA hardcodeadas
+          if grep -q "BEGIN.*KEY" app/core/config.py; then
+            echo "❌ Se encontraron claves hardcodeadas en config.py"
+            exit 1
+          fi
+          # Verificar que no hay contraseñas hardcodeadas
+          if grep -q "password.*=.*[\"'][^\"']\{8,\}[\"']" app/core/config.py; then
+            echo "❌ Se encontraron contraseñas hardcodeadas en config.py"
+            exit 1
+          fi
+          echo "✅ config.py no contiene valores hardcodeados"
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [gitleaks, bandit, safety, npm-audit, validate-no-secrets]
+    if: always()
+    steps:
+      - name: Resumen de seguridad
+        run: |
+          echo "## 🔒 Resumen de Escaneo de Seguridad" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks | ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bandit | ${{ needs.bandit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Safety | ${{ needs.safety.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| npm audit | ${{ needs.npm-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate No Secrets | ${{ needs.validate-no-secrets.result }} |" >> $GITHUB_STEP_SUMMARY
+
+
+
+

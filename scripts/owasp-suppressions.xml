@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- 
+    Archivo de supresiones para OWASP Dependency Check
+    Usar este archivo para suprimir falsos positivos o vulnerabilidades conocidas
+    que no son relevantes en nuestro contexto específico.
+    -->
+    
+    <!-- Ejemplo: Suprimir una CVE específica en una dependencia -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+        Razón de la supresión
+        ]]></notes>
+        <cve>CVE-YYYY-XXXXX</cve>
+    </suppress>
+    -->
+    
+    <!-- Ejemplo: Suprimir todas las vulnerabilidades de una dependencia específica -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+        Dependencia no utilizada en producción o contexto seguro
+        ]]></notes>
+        <packageUrl regex="true">^pkg:pypi/package-name@.*$</packageUrl>
+    </suppress>
+    -->
+    
+    <!-- Ejemplo: Suprimir vulnerabilidades en versiones específicas -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+        Vulnerabilidad conocida pero no explotable en nuestro contexto
+        ]]></notes>
+        <cve>CVE-YYYY-XXXXX</cve>
+        <packageUrl regex="true">^pkg:pypi/package-name@1\.0\.0$</packageUrl>
+    </suppress>
+    -->
+    
+    <!-- 
+    NOTA: Este archivo está vacío por defecto.
+    Agrega supresiones solo después de una revisión cuidadosa.
+    Documenta siempre la razón de cada supresión.
+    -->
+
+</suppressions>
+
+
+
+

@@ -36,7 +36,7 @@ export const OnboardingEvaluaciones: React.FC<OnboardingEvaluacionesProps> = ({ 
     {
       titulo: 'Crea tu primera evaluación',
       descripcion:
-        'Generaremos automáticamente el diagnóstico de 50 preguntas del Plan Pro para que comiences de inmediato.',
+        'Generar automáticamente el diagnóstico de 50 preguntas del Plan Pro.',
       icono: <FilePlus2 className="h-6 w-6 text-c4a-blue-600" />,
       accion: {
         tipo: 'accion',

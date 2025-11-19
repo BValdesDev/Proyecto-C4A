@@ -1,0 +1,291 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'hotfix/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+      fail-fast: false
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('aplicaciones/backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Instalar dependencias Python
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar Linting con Flake8
+        working-directory: aplicaciones/backend
+        continue-on-error: true
+        run: |
+          pip install flake8
+          flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Ejecutar Format Check con Black
+        working-directory: aplicaciones/backend
+        continue-on-error: true
+        run: |
+          pip install black
+          black --check --diff app/
+
+      - name: Ejecutar Type Check con mypy
+        working-directory: aplicaciones/backend
+        continue-on-error: true
+        run: |
+          pip install mypy
+          mypy app/ --ignore-missing-imports || true
+
+      - name: Ejecutar Tests con pytest
+        working-directory: aplicaciones/backend
+        env:
+          # Configurar PYTHONPATH para que pytest pueda encontrar el módulo 'app'
+          PYTHONPATH: ${{ github.workspace }}/aplicaciones/backend
+          URL_BASE_DATOS: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+          URL_REDIS: redis://localhost:6379/0
+          CLAVE_PUBLICA_JWT: ${{ secrets.TEST_JWT_PUBLIC_KEY }}
+          CLAVE_PRIVADA_JWT: ${{ secrets.TEST_JWT_PRIVATE_KEY }}
+          CLAVE_MAESTRA_CIFRADO: ${{ secrets.TEST_ENCRYPTION_KEY }}
+          ENTORNO: test
+          DEBUG: false
+        run: |
+          pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term
+
+      - name: Subir cobertura de código
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          file: ./aplicaciones/backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+      - name: Subir reportes de cobertura
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-${{ matrix.python-version }}
+          path: aplicaciones/backend/htmlcov/
+          retention-days: 7
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20']
+      fail-fast: false
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: aplicaciones/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/frontend
+        run: npm ci
+
+      - name: Ejecutar Linting con ESLint
+        working-directory: aplicaciones/frontend
+        continue-on-error: true
+        run: |
+          npm run lint || true
+
+      - name: Ejecutar Format Check con Prettier
+        working-directory: aplicaciones/frontend
+        continue-on-error: true
+        run: |
+          npx prettier --check "src/**/*.{ts,tsx,json,css}" || true
+
+      - name: Ejecutar Type Check
+        working-directory: aplicaciones/frontend
+        run: npm run type-check
+
+      - name: Ejecutar Tests con Vitest
+        working-directory: aplicaciones/frontend
+        run: |
+          npm run test -- --coverage --reporter=verbose
+
+      - name: Subir reportes de cobertura
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage-${{ matrix.node-version }}
+          path: aplicaciones/frontend/coverage/
+          retention-days: 7
+
+  backend-build:
+    name: Backend Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verificar importaciones
+        working-directory: aplicaciones/backend
+        run: |
+          python -c "from app.main import app; print('✅ Aplicación importada correctamente')"
+
+      - name: Verificar sintaxis
+        working-directory: aplicaciones/backend
+        run: |
+          python -m py_compile app/**/*.py || find app -name "*.py" -exec python -m py_compile {} \;
+
+  frontend-build:
+    name: Frontend Build Verification
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20']
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: aplicaciones/frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: aplicaciones/frontend
+        run: npm ci
+
+      - name: Build de producción
+        working-directory: aplicaciones/frontend
+        env:
+          VITE_API_URL: https://api.c4a.cl
+          VITE_STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+          VITE_ENVIRONMENT: production
+        run: npm run build
+
+      - name: Verificar artefactos de build
+        working-directory: aplicaciones/frontend
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ El directorio dist no existe después del build"
+            exit 1
+          fi
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ El archivo index.html no existe en dist"
+            exit 1
+          fi
+          echo "✅ Build completado correctamente"
+
+      - name: Subir artefactos de build
+        uses: actions/upload-artifact@v4
+        if: matrix.node-version == '18'
+        with:
+          name: frontend-build
+          path: aplicaciones/frontend/dist/
+          retention-days: 1
+
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, backend-build, frontend-build]
+    if: always()
+
+    steps:
+      - name: Resumen de CI
+        run: |
+          echo "## 🚀 Resumen del Pipeline CI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Tests | ${{ needs.backend-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Tests | ${{ needs.frontend-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Build | ${{ needs.backend-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Build | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.backend-tests.result }}" != "success" ] || \
+             [ "${{ needs.frontend-tests.result }}" != "success" ] || \
+             [ "${{ needs.backend-build.result }}" != "success" ] || \
+             [ "${{ needs.frontend-build.result }}" != "success" ]; then
+            echo "⚠️ **Algunos checks de CI fallaron. Por favor, revisa los logs.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ **Todos los checks de CI pasaron correctamente.**" >> $GITHUB_STEP_SUMMARY
+          fi
+

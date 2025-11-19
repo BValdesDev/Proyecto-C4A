@@ -66,6 +66,8 @@ jobs:
         run: |
           pytest -v --tb=short
         env:
+          # Configurar PYTHONPATH para que pytest pueda encontrar el módulo 'app'
+          PYTHONPATH: ${{ github.workspace }}/aplicaciones/backend
           # Variables de entorno para pruebas (valores de prueba)
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379
